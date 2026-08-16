@@ -170,6 +170,18 @@ export interface ResendDeadLetterResult {
   errorMessage?: string;
 }
 
+export interface DeleteMessagesRequest {
+  sequenceNumbers: number[];
+  subQueue?: number;
+}
+
+export interface DeleteMessagesResult {
+  requestedCount: number;
+  deletedCount: number;
+  success: boolean;
+  errorMessage?: string;
+}
+
 export interface SelectedEntity {
   type: 'queue' | 'topic' | 'subscription';
   name: string;
@@ -177,3 +189,4 @@ export interface SelectedEntity {
   subscriptionName?: string;
   counts?: EntityRuntimeCounts;
 }
+

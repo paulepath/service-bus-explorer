@@ -95,7 +95,7 @@ public static class MessageEndpoints
             string connectionId,
             string queueName,
             SubQueueType subQueue = SubQueueType.None,
-            int maxCount = 1000,
+            int maxCount = 5000,
             IMessageOperationsService messageOps = null!,
             CancellationToken ct = default) =>
         {
@@ -110,6 +110,26 @@ public static class MessageEndpoints
                 return Results.NotFound(new { error = ex.Message });
             }
         });
+
+        group.MapPost("/queues/{queueName}/messages/delete", async (
+            string connectionId,
+            string queueName,
+            DeleteMessagesRequest request,
+            IMessageOperationsService messageOps,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var entityPath = EntityPath.ForQueue(queueName);
+                var result = await messageOps.DeleteMessagesAsync(connectionId, entityPath, request.SequenceNumbers, request.SubQueue, ct);
+                return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+        });
+
 
         // Topic / Subscription message operations
         group.MapPost("/topics/{topicName}/messages/send", async (
@@ -178,7 +198,7 @@ public static class MessageEndpoints
             string topicName,
             string subscriptionName,
             SubQueueType subQueue = SubQueueType.None,
-            int maxCount = 1000,
+            int maxCount = 5000,
             IMessageOperationsService messageOps = null!,
             CancellationToken ct = default) =>
         {
@@ -193,6 +213,27 @@ public static class MessageEndpoints
                 return Results.NotFound(new { error = ex.Message });
             }
         });
+
+        group.MapPost("/topics/{topicName}/subscriptions/{subscriptionName}/messages/delete", async (
+            string connectionId,
+            string topicName,
+            string subscriptionName,
+            DeleteMessagesRequest request,
+            IMessageOperationsService messageOps,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var entityPath = EntityPath.ForSubscription(topicName, subscriptionName);
+                var result = await messageOps.DeleteMessagesAsync(connectionId, entityPath, request.SequenceNumbers, request.SubQueue, ct);
+                return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+        });
+
 
         return app;
     }

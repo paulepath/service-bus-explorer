@@ -17,8 +17,10 @@ import {
   CreateQueueRequest,
   CreateTopicRequest,
   CreateSubscriptionRequest,
-  SelectedEntity
+  SelectedEntity,
+  DeleteMessagesResult
 } from '../models/service-bus.models';
+
 
 @Injectable({
   providedIn: 'root'
@@ -154,7 +156,7 @@ export class ApiService {
     return this.http.delete<void>(`${this.baseUrl}/api/connections/${connectionId}/${targetPath}`);
   }
 
-  purgeMessages(connectionId: string, entity: SelectedEntity, subQueue: number = 0, maxCount: number = 1000): Observable<{ purgedCount: number }> {
+  purgeMessages(connectionId: string, entity: SelectedEntity, subQueue: number = 0, maxCount: number = 5000): Observable<{ purgedCount: number }> {
     const targetPath = entity.type === 'queue'
       ? `queues/${this.enc(entity.name)}/purge`
       : `topics/${this.enc(entity.topicName!)}/subscriptions/${this.enc(entity.subscriptionName!)}/purge`;
@@ -164,4 +166,21 @@ export class ApiService {
       {}
     );
   }
+
+  deleteMessages(
+    connectionId: string,
+    entity: SelectedEntity,
+    sequenceNumbers: number[],
+    subQueue: number = 0
+  ): Observable<DeleteMessagesResult> {
+    const targetPath = entity.type === 'queue'
+      ? `queues/${this.enc(entity.name)}/messages/delete`
+      : `topics/${this.enc(entity.topicName!)}/subscriptions/${this.enc(entity.subscriptionName!)}/messages/delete`;
+
+    return this.http.post<DeleteMessagesResult>(
+      `${this.baseUrl}/api/connections/${connectionId}/${targetPath}`,
+      { sequenceNumbers, subQueue }
+    );
+  }
 }
+

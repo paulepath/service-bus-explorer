@@ -293,6 +293,107 @@ public sealed class AzureMessageOperationsService : IMessageOperationsService
         return totalPurged;
     }
 
+    public async Task<DeleteMessagesResult> DeleteMessagesAsync(
+        string connectionId,
+        EntityPath entityPath,
+        IEnumerable<long> sequenceNumbers,
+        SubQueueType subQueue = SubQueueType.None,
+        CancellationToken ct = default)
+    {
+        var profile = await GetRequiredConnectionAsync(connectionId, ct);
+        var client = _clientCache.GetClient(profile);
+
+        var targetSeqs = new HashSet<long>(sequenceNumbers);
+        int requestedCount = targetSeqs.Count;
+        if (requestedCount == 0)
+        {
+            return new DeleteMessagesResult(0, 0, true);
+        }
+
+        int deletedCount = 0;
+        var unneededMessages = new List<ServiceBusReceivedMessage>();
+
+        var receiverOptions = new ServiceBusReceiverOptions
+        {
+            SubQueue = subQueue switch
+            {
+                SubQueueType.DeadLetter => SubQueue.DeadLetter,
+                SubQueueType.TransferDeadLetter => SubQueue.TransferDeadLetter,
+                _ => SubQueue.None
+            },
+            ReceiveMode = ServiceBusReceiveMode.PeekLock
+        };
+
+        await using var receiver = CreateReceiver(client, entityPath, receiverOptions);
+
+        int maxBatches = 50; // scan up to 5000 messages
+        try
+        {
+            while (targetSeqs.Count > 0 && maxBatches-- > 0)
+            {
+                int batchSize = Math.Min(100, Math.Max(10, targetSeqs.Count * 2));
+                var messages = await receiver.ReceiveMessagesAsync(batchSize, TimeSpan.FromSeconds(2), ct);
+                if (messages == null || messages.Count == 0)
+                {
+                    break;
+                }
+
+                foreach (var msg in messages)
+                {
+                    if (targetSeqs.Contains(msg.SequenceNumber))
+                    {
+                        await receiver.CompleteMessageAsync(msg, ct);
+                        targetSeqs.Remove(msg.SequenceNumber);
+                        deletedCount++;
+                    }
+                    else
+                    {
+                        unneededMessages.Add(msg);
+                    }
+                }
+
+                // Immediately release locks on unneeded messages
+                foreach (var unneeded in unneededMessages)
+                {
+                    try
+                    {
+                        await receiver.AbandonMessageAsync(unneeded, cancellationToken: ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Failed to abandon unneeded message {Seq}", unneeded.SequenceNumber);
+                    }
+                }
+                unneededMessages.Clear();
+
+                if (targetSeqs.Count == 0)
+                {
+                    break;
+                }
+            }
+
+            _logger.LogInformation("Deleted {Deleted}/{Requested} messages from {Path} ({SubQueue})", deletedCount, requestedCount, entityPath, subQueue);
+            return new DeleteMessagesResult(requestedCount, deletedCount, true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting messages from {Path} ({SubQueue})", entityPath, subQueue);
+            return new DeleteMessagesResult(requestedCount, deletedCount, false, ex.Message);
+        }
+        finally
+        {
+            foreach (var remaining in unneededMessages)
+            {
+                try
+                {
+                    await receiver.AbandonMessageAsync(remaining, cancellationToken: CancellationToken.None);
+                }
+                catch { }
+            }
+        }
+    }
+
+
     private ServiceBusReceiver CreateReceiver(ServiceBusClient client, EntityPath path, ServiceBusReceiverOptions options)
     {
         return path.Type switch

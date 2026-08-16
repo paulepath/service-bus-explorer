@@ -74,3 +74,15 @@ public sealed record ResendDeadLetterResult(
     bool OriginalRemoved,
     string? ErrorMessage = null
 );
+
+public sealed record DeleteMessagesRequest(
+    IReadOnlyList<long> SequenceNumbers,
+    SubQueueType SubQueue = SubQueueType.None
+);
+
+public sealed record DeleteMessagesResult(
+    int RequestedCount,
+    int DeletedCount,
+    bool Success,
+    string? ErrorMessage = null
+);

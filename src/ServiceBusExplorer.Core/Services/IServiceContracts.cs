@@ -66,7 +66,15 @@ public interface IMessageOperationsService
         SubQueueType subQueue = SubQueueType.None,
         int maxCount = 1000,
         CancellationToken ct = default);
+
+    Task<DeleteMessagesResult> DeleteMessagesAsync(
+        string connectionId,
+        EntityPath entityPath,
+        IEnumerable<long> sequenceNumbers,
+        SubQueueType subQueue = SubQueueType.None,
+        CancellationToken ct = default);
 }
+
 
 public interface IDiscoveryProvider
 {
