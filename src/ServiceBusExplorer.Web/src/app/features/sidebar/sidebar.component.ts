@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { StateService } from '../../core/services/state.service';
+import { ApiService } from '../../core/services/api.service';
 import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus.models';
 
 @Component({
@@ -42,8 +43,13 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
         <!-- Queues -->
         <div class="tree-group">
           <div class="group-header">
-            <span class="group-title">Queues</span>
-            <span class="badge badge-blue">{{ state.queues().length }}</span>
+            <div class="group-title-left">
+              <span class="group-title">Queues</span>
+              <span class="badge badge-blue">{{ state.queues().length }}</span>
+            </div>
+            <button class="icon-btn add-btn" title="Create New Queue" (click)="openCreateModal.emit({ type: 'queue' })">
+              ➕
+            </button>
           </div>
 
           <div class="group-items">
@@ -64,6 +70,12 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
                       {{ q.counts.deadLetterMessageCount }}
                     </span>
                   }
+                  <button
+                    class="item-action-btn delete-btn"
+                    title="Delete Queue"
+                    (click)="deleteQueue(q.name, $event)">
+                    🗑️
+                  </button>
                 </div>
               </div>
             }
@@ -76,8 +88,13 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
         <!-- Topics -->
         <div class="tree-group">
           <div class="group-header">
-            <span class="group-title">Topics</span>
-            <span class="badge badge-blue">{{ state.topics().length }}</span>
+            <div class="group-title-left">
+              <span class="group-title">Topics</span>
+              <span class="badge badge-blue">{{ state.topics().length }}</span>
+            </div>
+            <button class="icon-btn add-btn" title="Create New Topic" (click)="openCreateModal.emit({ type: 'topic' })">
+              ➕
+            </button>
           </div>
 
           <div class="group-items">
@@ -86,6 +103,21 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
                 <div class="tree-item topic-header">
                   <span class="item-icon">📢</span>
                   <span class="item-name" [title]="t.name">{{ t.name }}</span>
+
+                  <div class="item-badges">
+                    <button
+                      class="item-action-btn"
+                      title="Add Subscription"
+                      (click)="openCreateModal.emit({ type: 'subscription', parentTopicName: t.name }); $event.stopPropagation()">
+                      ➕
+                    </button>
+                    <button
+                      class="item-action-btn delete-btn"
+                      title="Delete Topic"
+                      (click)="deleteTopic(t.name, $event)">
+                      🗑️
+                    </button>
+                  </div>
                 </div>
 
                 <!-- Subscriptions -->
@@ -107,6 +139,12 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
                             {{ sub.counts.deadLetterMessageCount }}
                           </span>
                         }
+                        <button
+                          class="item-action-btn delete-btn"
+                          title="Delete Subscription"
+                          (click)="deleteSubscription(t.name, sub.subscriptionName, $event)">
+                          🗑️
+                        </button>
                       </div>
                     </div>
                   }
@@ -164,10 +202,14 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
       font-size: 12px;
       padding: 2px 4px;
       border-radius: 3px;
+      transition: all 0.15s ease;
     }
     .icon-btn:hover {
       background: var(--bg-card);
       color: var(--text-main);
+    }
+    .add-btn {
+      font-size: 11px;
     }
     .connection-select {
       font-weight: 500;
@@ -188,6 +230,11 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
       padding: 4px 8px;
       margin-bottom: 4px;
     }
+    .group-title-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
     .group-title {
       font-size: 11px;
       font-weight: 600;
@@ -198,11 +245,12 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
     .tree-item {
       display: flex;
       align-items: center;
-      padding: 6px 8px;
+      padding: 5px 8px;
       border-radius: 4px;
       cursor: pointer;
       gap: 6px;
       transition: background 0.1s ease;
+      position: relative;
     }
     .tree-item:hover {
       background: var(--bg-card-hover);
@@ -224,7 +272,24 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
     }
     .item-badges {
       display: flex;
+      align-items: center;
       gap: 4px;
+    }
+    .item-action-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 10px;
+      padding: 2px;
+      opacity: 0.4;
+      transition: opacity 0.15s ease, transform 0.1s ease;
+    }
+    .tree-item:hover .item-action-btn {
+      opacity: 0.8;
+    }
+    .item-action-btn:hover {
+      opacity: 1;
+      transform: scale(1.15);
     }
     .subscription-list {
       padding-left: 12px;
@@ -243,8 +308,10 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
 })
 export class SidebarComponent {
   @Output() openConnectModal = new EventEmitter<void>();
+  @Output() openCreateModal = new EventEmitter<{ type: 'queue' | 'topic' | 'subscription'; parentTopicName?: string }>();
 
   state = inject(StateService);
+  private api = inject(ApiService);
 
   onConnectionChange(event: Event) {
     const target = event.target as HTMLSelectElement;
@@ -279,6 +346,62 @@ export class SidebarComponent {
       return current.type === 'queue' && current.name === name;
     } else {
       return current.type === 'subscription' && current.subscriptionName === name && current.topicName === topicName;
+    }
+  }
+
+  deleteQueue(queueName: string, event: MouseEvent) {
+    event.stopPropagation();
+    const conn = this.state.selectedConnection();
+    if (!conn) return;
+
+    if (confirm(`Are you sure you want to delete queue "${queueName}"? All messages will be permanently lost.`)) {
+      this.api.deleteQueue(conn.id, queueName).subscribe({
+        next: () => {
+          if (this.state.selectedEntity()?.name === queueName) {
+            this.state.selectedEntity.set(null);
+          }
+          this.state.loadEntities();
+        },
+        error: (err) => alert(`Failed to delete queue: ${err.message || err}`)
+      });
+    }
+  }
+
+  deleteTopic(topicName: string, event: MouseEvent) {
+    event.stopPropagation();
+    const conn = this.state.selectedConnection();
+    if (!conn) return;
+
+    if (confirm(`Are you sure you want to delete topic "${topicName}" and all its subscriptions?`)) {
+      this.api.deleteTopic(conn.id, topicName).subscribe({
+        next: () => {
+          const current = this.state.selectedEntity();
+          if (current?.topicName === topicName || current?.name === topicName) {
+            this.state.selectedEntity.set(null);
+          }
+          this.state.loadEntities();
+        },
+        error: (err) => alert(`Failed to delete topic: ${err.message || err}`)
+      });
+    }
+  }
+
+  deleteSubscription(topicName: string, subscriptionName: string, event: MouseEvent) {
+    event.stopPropagation();
+    const conn = this.state.selectedConnection();
+    if (!conn) return;
+
+    if (confirm(`Are you sure you want to delete subscription "${subscriptionName}" under topic "${topicName}"?`)) {
+      this.api.deleteSubscription(conn.id, topicName, subscriptionName).subscribe({
+        next: () => {
+          const current = this.state.selectedEntity();
+          if (current?.subscriptionName === subscriptionName && current?.topicName === topicName) {
+            this.state.selectedEntity.set(null);
+          }
+          this.state.loadEntities();
+        },
+        error: (err) => alert(`Failed to delete subscription: ${err.message || err}`)
+      });
     }
   }
 }

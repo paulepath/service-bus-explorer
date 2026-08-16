@@ -100,11 +100,14 @@ export class StateService {
     this.loadEntities(conn.id);
   }
 
-  loadEntities(connectionId: string) {
+  loadEntities(connectionId?: string) {
+    const id = connectionId || this.selectedConnection()?.id;
+    if (!id) return;
+
     this.isLoading.set(true);
     this.statusMessage.set('Loading entities...');
 
-    this.api.getQueues(connectionId).subscribe({
+    this.api.getQueues(id).subscribe({
       next: (queues) => {
         this.queues.set(queues);
         this.isLoading.set(false);
@@ -125,7 +128,7 @@ export class StateService {
       }
     });
 
-    this.api.getTopics(connectionId).subscribe({
+    this.api.getTopics(id).subscribe({
       next: (topics) => this.topics.set(topics),
       error: (err) => console.error('Failed to load topics:', err)
     });

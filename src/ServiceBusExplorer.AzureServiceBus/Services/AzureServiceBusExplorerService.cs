@@ -355,6 +355,243 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
         return await EstimateCountsViaReceiverAsync(profile, entityPath, ct);
     }
 
+    public async Task<QueueSummary> CreateQueueAsync(string connectionId, CreateQueueRequest request, CancellationToken ct = default)
+    {
+        var profile = await GetRequiredConnectionAsync(connectionId, ct);
+        var adminClient = _clientCache.GetAdminClient(profile);
+
+        if (adminClient != null && profile.Type != ConnectionType.LocalEmulator)
+        {
+            var options = new CreateQueueOptions(request.Name)
+            {
+                MaxDeliveryCount = request.MaxDeliveryCount,
+                RequiresSession = request.RequiresSession,
+                DeadLetteringOnMessageExpiration = request.DeadLetteringOnMessageExpiration
+            };
+            if (request.LockDuration.HasValue) options.LockDuration = request.LockDuration.Value;
+
+            var created = await adminClient.CreateQueueAsync(options, ct);
+            return new QueueSummary(
+                Name: created.Value.Name,
+                Counts: new EntityRuntimeCounts(0, 0, 0, 0, 0, DateTimeOffset.UtcNow),
+                LockDuration: created.Value.LockDuration,
+                MaxDeliveryCount: created.Value.MaxDeliveryCount,
+                RequiresSession: created.Value.RequiresSession,
+                DeadLetteringOnMessageExpiration: created.Value.DeadLetteringOnMessageExpiration,
+                DefaultMessageTimeToLive: created.Value.DefaultMessageTimeToLive,
+                CreatedAt: DateTimeOffset.UtcNow,
+                UpdatedAt: DateTimeOffset.UtcNow,
+                Status: created.Value.Status.ToString()
+            );
+        }
+
+        // Emulator: Add to ConfiguredQueues
+        var currentQueues = profile.ConfiguredQueues?.ToList() ?? new List<ConfiguredQueue>();
+        if (!currentQueues.Any(q => string.Equals(q.Name, request.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            currentQueues.Add(new ConfiguredQueue(
+                Name: request.Name,
+                LockDuration: request.LockDuration ?? TimeSpan.FromMinutes(1),
+                MaxDeliveryCount: request.MaxDeliveryCount,
+                RequiresSession: request.RequiresSession,
+                DeadLetteringOnMessageExpiration: request.DeadLetteringOnMessageExpiration
+            ));
+            var updated = profile with { ConfiguredQueues = currentQueues };
+            await _connectionManager.UpdateConnectionProfileAsync(updated, ct);
+        }
+
+        return new QueueSummary(
+            Name: request.Name,
+            Counts: new EntityRuntimeCounts(0, 0, 0, 0, 0, DateTimeOffset.UtcNow),
+            LockDuration: request.LockDuration ?? TimeSpan.FromMinutes(1),
+            MaxDeliveryCount: request.MaxDeliveryCount,
+            RequiresSession: request.RequiresSession,
+            DeadLetteringOnMessageExpiration: request.DeadLetteringOnMessageExpiration,
+            DefaultMessageTimeToLive: TimeSpan.FromHours(1),
+            CreatedAt: DateTimeOffset.UtcNow,
+            UpdatedAt: DateTimeOffset.UtcNow,
+            Status: "Active"
+        );
+    }
+
+    public async Task<bool> DeleteQueueAsync(string connectionId, string queueName, CancellationToken ct = default)
+    {
+        var profile = await GetRequiredConnectionAsync(connectionId, ct);
+        var adminClient = _clientCache.GetAdminClient(profile);
+
+        if (adminClient != null && profile.Type != ConnectionType.LocalEmulator)
+        {
+            await adminClient.DeleteQueueAsync(queueName, ct);
+            return true;
+        }
+
+        if (profile.ConfiguredQueues != null)
+        {
+            var filtered = profile.ConfiguredQueues.Where(q => !string.Equals(q.Name, queueName, StringComparison.OrdinalIgnoreCase)).ToList();
+            var updated = profile with { ConfiguredQueues = filtered };
+            await _connectionManager.UpdateConnectionProfileAsync(updated, ct);
+            return true;
+        }
+
+        return false;
+    }
+
+    public async Task<TopicSummary> CreateTopicAsync(string connectionId, CreateTopicRequest request, CancellationToken ct = default)
+    {
+        var profile = await GetRequiredConnectionAsync(connectionId, ct);
+        var adminClient = _clientCache.GetAdminClient(profile);
+
+        if (adminClient != null && profile.Type != ConnectionType.LocalEmulator)
+        {
+            var options = new CreateTopicOptions(request.Name);
+            if (request.MaxSizeInMegabytes.HasValue) options.MaxSizeInMegabytes = request.MaxSizeInMegabytes.Value;
+
+            var created = await adminClient.CreateTopicAsync(options, ct);
+            return new TopicSummary(
+                Name: created.Value.Name,
+                SizeInBytes: created.Value.MaxSizeInMegabytes * 1024 * 1024,
+                CreatedAt: DateTimeOffset.UtcNow,
+                UpdatedAt: DateTimeOffset.UtcNow,
+                Status: created.Value.Status.ToString(),
+                Subscriptions: Array.Empty<SubscriptionSummary>()
+            );
+        }
+
+        var currentTopics = profile.ConfiguredTopics?.ToList() ?? new List<ConfiguredTopic>();
+        if (!currentTopics.Any(t => string.Equals(t.Name, request.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            currentTopics.Add(new ConfiguredTopic(
+                Name: request.Name,
+                Subscriptions: Array.Empty<ConfiguredSubscription>()
+            ));
+            var updated = profile with { ConfiguredTopics = currentTopics };
+            await _connectionManager.UpdateConnectionProfileAsync(updated, ct);
+        }
+
+        return new TopicSummary(
+            Name: request.Name,
+            SizeInBytes: (request.MaxSizeInMegabytes ?? 1024) * 1024 * 1024,
+            CreatedAt: DateTimeOffset.UtcNow,
+            UpdatedAt: DateTimeOffset.UtcNow,
+            Status: "Active",
+            Subscriptions: Array.Empty<SubscriptionSummary>()
+        );
+    }
+
+    public async Task<bool> DeleteTopicAsync(string connectionId, string topicName, CancellationToken ct = default)
+    {
+        var profile = await GetRequiredConnectionAsync(connectionId, ct);
+        var adminClient = _clientCache.GetAdminClient(profile);
+
+        if (adminClient != null && profile.Type != ConnectionType.LocalEmulator)
+        {
+            await adminClient.DeleteTopicAsync(topicName, ct);
+            return true;
+        }
+
+        if (profile.ConfiguredTopics != null)
+        {
+            var filtered = profile.ConfiguredTopics.Where(t => !string.Equals(t.Name, topicName, StringComparison.OrdinalIgnoreCase)).ToList();
+            var updated = profile with { ConfiguredTopics = filtered };
+            await _connectionManager.UpdateConnectionProfileAsync(updated, ct);
+            return true;
+        }
+
+        return false;
+    }
+
+    public async Task<SubscriptionSummary> CreateSubscriptionAsync(string connectionId, string topicName, CreateSubscriptionRequest request, CancellationToken ct = default)
+    {
+        var profile = await GetRequiredConnectionAsync(connectionId, ct);
+        var adminClient = _clientCache.GetAdminClient(profile);
+
+        if (adminClient != null && profile.Type != ConnectionType.LocalEmulator)
+        {
+            var options = new CreateSubscriptionOptions(topicName, request.SubscriptionName)
+            {
+                MaxDeliveryCount = request.MaxDeliveryCount,
+                RequiresSession = request.RequiresSession,
+                DeadLetteringOnMessageExpiration = request.DeadLetteringOnMessageExpiration
+            };
+            if (request.LockDuration.HasValue) options.LockDuration = request.LockDuration.Value;
+
+            var created = await adminClient.CreateSubscriptionAsync(options, ct);
+            return new SubscriptionSummary(
+                TopicName: topicName,
+                SubscriptionName: created.Value.SubscriptionName,
+                Counts: new EntityRuntimeCounts(0, 0, 0, 0, 0, DateTimeOffset.UtcNow),
+                LockDuration: created.Value.LockDuration,
+                MaxDeliveryCount: created.Value.MaxDeliveryCount,
+                RequiresSession: created.Value.RequiresSession,
+                DeadLetteringOnMessageExpiration: created.Value.DeadLetteringOnMessageExpiration,
+                DefaultMessageTimeToLive: created.Value.DefaultMessageTimeToLive,
+                CreatedAt: DateTimeOffset.UtcNow,
+                UpdatedAt: DateTimeOffset.UtcNow,
+                Status: created.Value.Status.ToString(),
+                Rules: Array.Empty<SubscriptionRuleSummary>()
+            );
+        }
+
+        var currentTopics = profile.ConfiguredTopics?.ToList() ?? new List<ConfiguredTopic>();
+        var topicIndex = currentTopics.FindIndex(t => string.Equals(t.Name, topicName, StringComparison.OrdinalIgnoreCase));
+        if (topicIndex >= 0)
+        {
+            var topic = currentTopics[topicIndex];
+            var subs = topic.Subscriptions?.ToList() ?? new List<ConfiguredSubscription>();
+            if (!subs.Any(s => string.Equals(s.Name, request.SubscriptionName, StringComparison.OrdinalIgnoreCase)))
+            {
+                subs.Add(new ConfiguredSubscription(request.SubscriptionName, Array.Empty<SubscriptionRuleSummary>()));
+                currentTopics[topicIndex] = topic with { Subscriptions = subs };
+                var updated = profile with { ConfiguredTopics = currentTopics };
+                await _connectionManager.UpdateConnectionProfileAsync(updated, ct);
+            }
+        }
+
+        return new SubscriptionSummary(
+            TopicName: topicName,
+            SubscriptionName: request.SubscriptionName,
+            Counts: new EntityRuntimeCounts(0, 0, 0, 0, 0, DateTimeOffset.UtcNow),
+            LockDuration: request.LockDuration ?? TimeSpan.FromMinutes(1),
+            MaxDeliveryCount: request.MaxDeliveryCount,
+            RequiresSession: request.RequiresSession,
+            DeadLetteringOnMessageExpiration: request.DeadLetteringOnMessageExpiration,
+            DefaultMessageTimeToLive: TimeSpan.FromHours(1),
+            CreatedAt: DateTimeOffset.UtcNow,
+            UpdatedAt: DateTimeOffset.UtcNow,
+            Status: "Active",
+            Rules: Array.Empty<SubscriptionRuleSummary>()
+        );
+    }
+
+    public async Task<bool> DeleteSubscriptionAsync(string connectionId, string topicName, string subscriptionName, CancellationToken ct = default)
+    {
+        var profile = await GetRequiredConnectionAsync(connectionId, ct);
+        var adminClient = _clientCache.GetAdminClient(profile);
+
+        if (adminClient != null && profile.Type != ConnectionType.LocalEmulator)
+        {
+            await adminClient.DeleteSubscriptionAsync(topicName, subscriptionName, ct);
+            return true;
+        }
+
+        if (profile.ConfiguredTopics != null)
+        {
+            var currentTopics = profile.ConfiguredTopics.ToList();
+            var topicIndex = currentTopics.FindIndex(t => string.Equals(t.Name, topicName, StringComparison.OrdinalIgnoreCase));
+            if (topicIndex >= 0)
+            {
+                var topic = currentTopics[topicIndex];
+                var filteredSubs = topic.Subscriptions?.Where(s => !string.Equals(s.Name, subscriptionName, StringComparison.OrdinalIgnoreCase)).ToList() ?? new List<ConfiguredSubscription>();
+                currentTopics[topicIndex] = topic with { Subscriptions = filteredSubs };
+                var updated = profile with { ConfiguredTopics = currentTopics };
+                await _connectionManager.UpdateConnectionProfileAsync(updated, ct);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private async Task<EntityRuntimeCounts> EstimateCountsViaReceiverAsync(ConnectionProfile profile, EntityPath entityPath, CancellationToken ct)
     {
         try

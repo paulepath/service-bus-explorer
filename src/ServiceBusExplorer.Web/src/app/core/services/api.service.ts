@@ -7,12 +7,16 @@ import {
   NamespaceOverview,
   QueueSummary,
   TopicSummary,
+  SubscriptionSummary,
   EntityRuntimeCounts,
   ServiceBusMessageDto,
   SendMessageRequest,
   SendMessageResult,
   ResendDeadLetterRequest,
   ResendDeadLetterResult,
+  CreateQueueRequest,
+  CreateTopicRequest,
+  CreateSubscriptionRequest,
   SelectedEntity
 } from '../models/service-bus.models';
 
@@ -52,8 +56,32 @@ export class ApiService {
     return this.http.get<QueueSummary[]>(`${this.baseUrl}/api/connections/${connectionId}/queues`);
   }
 
+  createQueue(connectionId: string, request: CreateQueueRequest): Observable<QueueSummary> {
+    return this.http.post<QueueSummary>(`${this.baseUrl}/api/connections/${connectionId}/queues`, request);
+  }
+
+  deleteQueue(connectionId: string, queueName: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/api/connections/${connectionId}/queues/${queueName}`);
+  }
+
   getTopics(connectionId: string): Observable<TopicSummary[]> {
     return this.http.get<TopicSummary[]>(`${this.baseUrl}/api/connections/${connectionId}/topics`);
+  }
+
+  createTopic(connectionId: string, request: CreateTopicRequest): Observable<TopicSummary> {
+    return this.http.post<TopicSummary>(`${this.baseUrl}/api/connections/${connectionId}/topics`, request);
+  }
+
+  deleteTopic(connectionId: string, topicName: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/api/connections/${connectionId}/topics/${topicName}`);
+  }
+
+  createSubscription(connectionId: string, topicName: string, request: CreateSubscriptionRequest): Observable<SubscriptionSummary> {
+    return this.http.post<SubscriptionSummary>(`${this.baseUrl}/api/connections/${connectionId}/topics/${topicName}/subscriptions`, request);
+  }
+
+  deleteSubscription(connectionId: string, topicName: string, subscriptionName: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/api/connections/${connectionId}/topics/${topicName}/subscriptions/${subscriptionName}`);
   }
 
   getEntityCounts(connectionId: string, entity: SelectedEntity): Observable<EntityRuntimeCounts> {

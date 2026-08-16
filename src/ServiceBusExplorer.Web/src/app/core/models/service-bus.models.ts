@@ -82,6 +82,27 @@ export interface NamespaceOverview {
   totalDeadLetterMessages: number;
 }
 
+export interface CreateQueueRequest {
+  name: string;
+  maxDeliveryCount?: number;
+  lockDuration?: string;
+  requiresSession?: boolean;
+  deadLetteringOnMessageExpiration?: boolean;
+}
+
+export interface CreateTopicRequest {
+  name: string;
+  maxSizeInMegabytes?: number;
+}
+
+export interface CreateSubscriptionRequest {
+  subscriptionName: string;
+  maxDeliveryCount?: number;
+  lockDuration?: string;
+  requiresSession?: boolean;
+  deadLetteringOnMessageExpiration?: boolean;
+}
+
 export type MessagePayloadFormat = 'Json' | 'Xml' | 'PlainText' | 'Binary' | 'Base64' | 'Jwt';
 
 export interface ServiceBusMessageDto {

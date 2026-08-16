@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal, HostListener } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { StateService } from './core/services/state.service';
 import { ThemeService } from './core/services/theme.service';
@@ -8,6 +8,7 @@ import { MessageDetailComponent } from './features/message-detail/message-detail
 import { SendModalComponent } from './shared/components/send-modal.component';
 import { ConnectModalComponent } from './shared/components/connect-modal.component';
 import { ResendModalComponent } from './shared/components/resend-modal.component';
+import { CreateEntityModalComponent, EntityCreationType } from './shared/components/create-entity-modal.component';
 import { SendMessageRequest, ServiceBusMessageDto } from './core/models/service-bus.models';
 
 @Component({
@@ -20,7 +21,8 @@ import { SendMessageRequest, ServiceBusMessageDto } from './core/models/service-
     MessageDetailComponent,
     SendModalComponent,
     ConnectModalComponent,
-    ResendModalComponent
+    ResendModalComponent,
+    CreateEntityModalComponent
   ],
   template: `
     <div class="app-layout" [class.resizing]="isResizing()">
@@ -58,7 +60,9 @@ import { SendMessageRequest, ServiceBusMessageDto } from './core/models/service-
       <div class="app-body">
         <!-- Sidebar (Left Pane) -->
         <div class="pane-sidebar" [style.width.px]="sidebarWidth()">
-          <app-sidebar (openConnectModal)="showConnectModal.set(true)"></app-sidebar>
+          <app-sidebar
+            (openConnectModal)="showConnectModal.set(true)"
+            (openCreateModal)="onOpenCreateModal($event)"></app-sidebar>
         </div>
 
         <!-- Left Splitter Handle -->
@@ -107,6 +111,14 @@ import { SendMessageRequest, ServiceBusMessageDto } from './core/models/service-
         <app-connect-modal
           (closed)="showConnectModal.set(false)"
           (connected)="showConnectModal.set(false)"></app-connect-modal>
+      }
+
+      @if (showCreateEntityModal()) {
+        <app-create-entity-modal
+          [entityType]="createEntityType"
+          [parentTopicName]="createParentTopicName"
+          (closed)="showCreateEntityModal.set(false)"
+          (created)="state.loadEntities()"></app-create-entity-modal>
       }
 
       @if (showSendModal() && state.selectedEntity(); as entity) {
@@ -320,6 +332,10 @@ export class App implements OnInit {
   showConnectModal = signal<boolean>(false);
   showSendModal = signal<boolean>(false);
   showResendModal = signal<boolean>(false);
+  showCreateEntityModal = signal<boolean>(false);
+
+  createEntityType: EntityCreationType = 'queue';
+  createParentTopicName?: string;
 
   sendModalInitialData?: SendMessageRequest;
   selectedDlqMessage?: ServiceBusMessageDto;
@@ -346,6 +362,12 @@ export class App implements OnInit {
     }
 
     this.state.init();
+  }
+
+  onOpenCreateModal(event: { type: EntityCreationType; parentTopicName?: string }) {
+    this.createEntityType = event.type;
+    this.createParentTopicName = event.parentTopicName;
+    this.showCreateEntityModal.set(true);
   }
 
   startResize(pane: 'sidebar' | 'detail', event: MouseEvent): void {

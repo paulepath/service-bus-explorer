@@ -1,5 +1,14 @@
 namespace ServiceBusExplorer.Core.Models;
 
+public sealed record NamespaceOverview(
+    string Name,
+    int QueueCount,
+    int TopicCount,
+    int SubscriptionCount,
+    long TotalActiveMessages,
+    long TotalDeadLetterMessages
+);
+
 public sealed record EntityRuntimeCounts(
     long ActiveMessageCount,
     long DeadLetterMessageCount,
@@ -53,11 +62,23 @@ public sealed record TopicSummary(
     IReadOnlyList<SubscriptionSummary> Subscriptions
 );
 
-public sealed record NamespaceOverview(
+public sealed record CreateQueueRequest(
     string Name,
-    int QueueCount,
-    int TopicCount,
-    int SubscriptionCount,
-    long TotalActiveMessages,
-    long TotalDeadLetterMessages
+    int MaxDeliveryCount = 10,
+    TimeSpan? LockDuration = null,
+    bool RequiresSession = false,
+    bool DeadLetteringOnMessageExpiration = false
+);
+
+public sealed record CreateTopicRequest(
+    string Name,
+    long? MaxSizeInMegabytes = 1024
+);
+
+public sealed record CreateSubscriptionRequest(
+    string SubscriptionName,
+    int MaxDeliveryCount = 10,
+    TimeSpan? LockDuration = null,
+    bool RequiresSession = false,
+    bool DeadLetteringOnMessageExpiration = false
 );

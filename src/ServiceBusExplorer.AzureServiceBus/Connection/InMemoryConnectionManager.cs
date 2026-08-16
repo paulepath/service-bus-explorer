@@ -29,6 +29,12 @@ public sealed class InMemoryConnectionManager : IConnectionManager
         return Task.FromResult(enriched);
     }
 
+    public Task UpdateConnectionProfileAsync(ConnectionProfile profile, CancellationToken ct = default)
+    {
+        _connections[profile.Id] = profile;
+        return Task.CompletedTask;
+    }
+
     public Task<bool> RemoveConnectionAsync(string connectionId, CancellationToken ct = default)
     {
         var removed = _connections.TryRemove(connectionId, out _);

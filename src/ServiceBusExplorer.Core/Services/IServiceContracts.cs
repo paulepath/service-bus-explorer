@@ -9,6 +9,7 @@ public interface IConnectionManager
     Task<ConnectionProfile> AddConnectionAsync(ConnectionProfile profile, CancellationToken ct = default);
     Task<bool> RemoveConnectionAsync(string connectionId, CancellationToken ct = default);
     Task RegisterDiscoveredConnectionsAsync(IEnumerable<ConnectionProfile> profiles, CancellationToken ct = default);
+    Task UpdateConnectionProfileAsync(ConnectionProfile profile, CancellationToken ct = default);
 }
 
 public interface IServiceBusExplorerService
@@ -20,6 +21,15 @@ public interface IServiceBusExplorerService
     Task<TopicSummary?> GetTopicAsync(string connectionId, string topicName, CancellationToken ct = default);
     Task<SubscriptionSummary?> GetSubscriptionAsync(string connectionId, string topicName, string subscriptionName, CancellationToken ct = default);
     Task<EntityRuntimeCounts> GetEntityCountsAsync(string connectionId, EntityPath entityPath, CancellationToken ct = default);
+
+    Task<QueueSummary> CreateQueueAsync(string connectionId, CreateQueueRequest request, CancellationToken ct = default);
+    Task<bool> DeleteQueueAsync(string connectionId, string queueName, CancellationToken ct = default);
+
+    Task<TopicSummary> CreateTopicAsync(string connectionId, CreateTopicRequest request, CancellationToken ct = default);
+    Task<bool> DeleteTopicAsync(string connectionId, string topicName, CancellationToken ct = default);
+
+    Task<SubscriptionSummary> CreateSubscriptionAsync(string connectionId, string topicName, CreateSubscriptionRequest request, CancellationToken ct = default);
+    Task<bool> DeleteSubscriptionAsync(string connectionId, string topicName, string subscriptionName, CancellationToken ct = default);
 }
 
 public interface IMessageOperationsService
