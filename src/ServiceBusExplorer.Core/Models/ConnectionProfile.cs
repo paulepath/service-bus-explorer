@@ -50,5 +50,7 @@ public sealed record ConnectionProfile(
     bool IsDiscovered,
     ServiceBusCapabilities Capabilities,
     IReadOnlyList<ConfiguredQueue>? ConfiguredQueues = null,
-    IReadOnlyList<ConfiguredTopic>? ConfiguredTopics = null
+    IReadOnlyList<ConfiguredTopic>? ConfiguredTopics = null,
+    string? ContainerId = null,
+    string? ConfigFilePath = null
 );

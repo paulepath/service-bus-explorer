@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.Testing;
 using ServiceBusExplorer.Api.Endpoints;
 using ServiceBusExplorer.Core.Models;
@@ -12,6 +13,12 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly HttpClient _client;
     private const string EmulatorConnStr = "Endpoint=sb://127.0.0.1:5673;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;";
+
+    private readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     public ApiIntegrationTests(WebApplicationFactory<Program> factory)
     {
@@ -41,13 +48,13 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
             FullyQualifiedNamespace: "sbemulatorns"
         );
 
-        var addResponse = await _client.PostAsJsonAsync("/api/connections", createRequest);
+        var addResponse = await _client.PostAsJsonAsync("/api/connections", createRequest, _jsonOptions);
         Assert.Equal(HttpStatusCode.Created, addResponse.StatusCode);
 
         // 3. Get connections
         var listResponse = await _client.GetAsync("/api/connections");
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
-        var connections = await listResponse.Content.ReadFromJsonAsync<List<ConnectionProfile>>();
+        var connections = await listResponse.Content.ReadFromJsonAsync<List<ConnectionProfile>>(_jsonOptions);
         Assert.NotNull(connections);
         Assert.Contains(connections, c => c.Id == "api-test-conn");
     }
@@ -63,7 +70,7 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
             ConnectionString: EmulatorConnStr,
             FullyQualifiedNamespace: "sbemulatorns"
         );
-        await _client.PostAsJsonAsync("/api/connections", createRequest);
+        await _client.PostAsJsonAsync("/api/connections", createRequest, _jsonOptions);
 
         // 2. Send message via HTTP API
         string uniqueId = $"api-test-{Guid.NewGuid():N}";
@@ -74,17 +81,17 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
             Subject: "HttpApiTestMessage"
         );
 
-        var sendResponse = await _client.PostAsJsonAsync("/api/connections/api-msg-conn/queues/normal-queue/messages/send", sendPayload);
+        var sendResponse = await _client.PostAsJsonAsync("/api/connections/api-msg-conn/queues/normal-queue/messages/send", sendPayload, _jsonOptions);
         Assert.Equal(HttpStatusCode.OK, sendResponse.StatusCode);
-        var sendResult = await sendResponse.Content.ReadFromJsonAsync<SendMessageResult>();
+        var sendResult = await sendResponse.Content.ReadFromJsonAsync<SendMessageResult>(_jsonOptions);
         Assert.NotNull(sendResult);
         Assert.True(sendResult.Success);
         Assert.Equal(uniqueId, sendResult.MessageId);
 
         // 3. Peek message via HTTP API
-        var peekResponse = await _client.GetAsync("/api/connections/api-msg-conn/queues/normal-queue/messages?count=20");
+        var peekResponse = await _client.GetAsync("/api/connections/api-msg-conn/queues/normal-queue/messages?count=50");
         Assert.Equal(HttpStatusCode.OK, peekResponse.StatusCode);
-        var messages = await peekResponse.Content.ReadFromJsonAsync<List<ServiceBusMessageDto>>();
+        var messages = await peekResponse.Content.ReadFromJsonAsync<List<ServiceBusMessageDto>>(_jsonOptions);
         Assert.NotNull(messages);
         var found = messages.FirstOrDefault(m => m.MessageId == uniqueId);
         Assert.NotNull(found);

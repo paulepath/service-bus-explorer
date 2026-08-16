@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Azure.Messaging.ServiceBus;
 using Azure.Messaging.ServiceBus.Administration;
 using Microsoft.Extensions.Logging;
@@ -398,6 +400,7 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
             ));
             var updated = profile with { ConfiguredQueues = currentQueues };
             await _connectionManager.UpdateConnectionProfileAsync(updated, ct);
+            await PersistConfigFileAsync(updated, ct);
         }
 
         return new QueueSummary(
@@ -430,6 +433,7 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
             var filtered = profile.ConfiguredQueues.Where(q => !string.Equals(q.Name, queueName, StringComparison.OrdinalIgnoreCase)).ToList();
             var updated = profile with { ConfiguredQueues = filtered };
             await _connectionManager.UpdateConnectionProfileAsync(updated, ct);
+            await PersistConfigFileAsync(updated, ct);
             return true;
         }
 
@@ -466,6 +470,7 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
             ));
             var updated = profile with { ConfiguredTopics = currentTopics };
             await _connectionManager.UpdateConnectionProfileAsync(updated, ct);
+            await PersistConfigFileAsync(updated, ct);
         }
 
         return new TopicSummary(
@@ -494,6 +499,7 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
             var filtered = profile.ConfiguredTopics.Where(t => !string.Equals(t.Name, topicName, StringComparison.OrdinalIgnoreCase)).ToList();
             var updated = profile with { ConfiguredTopics = filtered };
             await _connectionManager.UpdateConnectionProfileAsync(updated, ct);
+            await PersistConfigFileAsync(updated, ct);
             return true;
         }
 
@@ -544,6 +550,7 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
                 currentTopics[topicIndex] = topic with { Subscriptions = subs };
                 var updated = profile with { ConfiguredTopics = currentTopics };
                 await _connectionManager.UpdateConnectionProfileAsync(updated, ct);
+                await PersistConfigFileAsync(updated, ct);
             }
         }
 
@@ -585,11 +592,75 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
                 currentTopics[topicIndex] = topic with { Subscriptions = filteredSubs };
                 var updated = profile with { ConfiguredTopics = currentTopics };
                 await _connectionManager.UpdateConnectionProfileAsync(updated, ct);
+                await PersistConfigFileAsync(updated, ct);
                 return true;
             }
         }
 
         return false;
+    }
+
+    private async Task PersistConfigFileAsync(ConnectionProfile profile, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(profile.ConfigFilePath) || !File.Exists(profile.ConfigFilePath))
+        {
+            return;
+        }
+
+        try
+        {
+            var jsonObject = new JsonObject
+            {
+                ["UserConfig"] = new JsonObject
+                {
+                    ["Namespaces"] = new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["Name"] = profile.FullyQualifiedNamespace ?? "sbemulatorns",
+                            ["Queues"] = new JsonArray(
+                                (profile.ConfiguredQueues ?? Array.Empty<ConfiguredQueue>()).Select(q => new JsonObject
+                                {
+                                    ["Name"] = q.Name,
+                                    ["Properties"] = new JsonObject
+                                    {
+                                        ["LockDuration"] = "PT1M",
+                                        ["MaxDeliveryCount"] = q.MaxDeliveryCount,
+                                        ["RequiresSession"] = q.RequiresSession
+                                    }
+                                }).ToArray()
+                            ),
+                            ["Topics"] = new JsonArray(
+                                (profile.ConfiguredTopics ?? Array.Empty<ConfiguredTopic>()).Select(t => new JsonObject
+                                {
+                                    ["Name"] = t.Name,
+                                    ["Properties"] = new JsonObject(),
+                                    ["Subscriptions"] = new JsonArray(
+                                        (t.Subscriptions ?? Array.Empty<ConfiguredSubscription>()).Select(s => new JsonObject
+                                        {
+                                            ["Name"] = s.Name,
+                                            ["Properties"] = new JsonObject()
+                                        }).ToArray()
+                                    )
+                                }).ToArray()
+                            )
+                        }
+                    },
+                    ["Logging"] = new JsonObject
+                    {
+                        ["Type"] = "File"
+                    }
+                }
+            };
+
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            string jsonString = jsonObject.ToJsonString(options);
+            await File.WriteAllTextAsync(profile.ConfigFilePath, jsonString, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not persist Config.json to {Path}", profile.ConfigFilePath);
+        }
     }
 
     private async Task<EntityRuntimeCounts> EstimateCountsViaReceiverAsync(ConnectionProfile profile, EntityPath entityPath, CancellationToken ct)
@@ -605,8 +676,19 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
                 _ => throw new InvalidOperationException($"Cannot peek counts for entity type {entityPath.Type}")
             };
 
-            var peekedActive = await activeReceiver.PeekMessagesAsync(100, cancellationToken: ct);
-            await activeReceiver.DisposeAsync();
+            IReadOnlyList<ServiceBusReceivedMessage> peekedActive;
+            try
+            {
+                peekedActive = await activeReceiver.PeekMessagesAsync(100, cancellationToken: ct);
+            }
+            catch (ServiceBusException sbe) when (sbe.Reason == ServiceBusFailureReason.MessagingEntityNotFound)
+            {
+                return new EntityRuntimeCounts(0, 0, 0, 0, 0, DateTimeOffset.UtcNow);
+            }
+            finally
+            {
+                await activeReceiver.DisposeAsync();
+            }
 
             ServiceBusReceiver dlqReceiver = entityPath.Type switch
             {
@@ -616,8 +698,19 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
                 _ => throw new InvalidOperationException($"Cannot peek counts for entity type {entityPath.Type}")
             };
 
-            var peekedDlq = await dlqReceiver.PeekMessagesAsync(100, cancellationToken: ct);
-            await dlqReceiver.DisposeAsync();
+            IReadOnlyList<ServiceBusReceivedMessage> peekedDlq;
+            try
+            {
+                peekedDlq = await dlqReceiver.PeekMessagesAsync(100, cancellationToken: ct);
+            }
+            catch (ServiceBusException sbe) when (sbe.Reason == ServiceBusFailureReason.MessagingEntityNotFound)
+            {
+                peekedDlq = Array.Empty<ServiceBusReceivedMessage>();
+            }
+            finally
+            {
+                await dlqReceiver.DisposeAsync();
+            }
 
             return new EntityRuntimeCounts(
                 ActiveMessageCount: peekedActive.Count,
@@ -630,7 +723,7 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not estimate counts via receiver for {Path}", entityPath);
+            _logger.LogDebug(ex, "Could not estimate counts via receiver for {Path}", entityPath);
             return new EntityRuntimeCounts(0, 0, 0, 0, 0, DateTimeOffset.UtcNow);
         }
     }

@@ -64,7 +64,7 @@ public class ServiceBusEmulatorIntegrationTests : IAsyncDisposable
         Assert.Equal(testMessageId, sendResult.MessageId);
 
         // Act - Safe Peek
-        var peekedMessages = await _messageOps.PeekMessagesAsync(_profile.Id, queuePath, SubQueueType.None, maxMessages: 10);
+        var peekedMessages = await _messageOps.PeekMessagesAsync(_profile.Id, queuePath, SubQueueType.None, maxMessages: 50);
 
         // Assert
         var found = peekedMessages.FirstOrDefault(m => m.MessageId == testMessageId);

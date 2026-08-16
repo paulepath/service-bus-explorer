@@ -3,14 +3,17 @@ using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.FileProviders;
 using ServiceBusExplorer.Api.Endpoints;
 using ServiceBusExplorer.AzureServiceBus.Extensions;
+using ServiceBusExplorer.Core.Converters;
 using ServiceBusExplorer.Discovery.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure JSON serialization for enums and polymorphic types
+// Configure JSON serialization for enums, time spans, and polymorphic types
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    options.SerializerOptions.Converters.Add(new FlexibleTimeSpanJsonConverter());
+    options.SerializerOptions.Converters.Add(new NullableFlexibleTimeSpanJsonConverter());
     options.SerializerOptions.PropertyNameCaseInsensitive = true;
 });
 

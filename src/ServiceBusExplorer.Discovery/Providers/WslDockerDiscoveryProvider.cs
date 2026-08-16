@@ -27,7 +27,7 @@ public sealed class WslDockerDiscoveryProvider : IDiscoveryProvider
         var list = new List<ConnectionProfile>();
         foreach (var e in emulators)
         {
-            var (queues, topics) = await ExtractEntitiesFromContainerAsync(e.ContainerId, ct);
+            var (queues, topics, configPath) = await ExtractEntitiesFromContainerAsync(e.ContainerId, ct);
 
             list.Add(new ConnectionProfile(
                 Id: $"discovered-{e.ContainerId[..Math.Min(12, e.ContainerId.Length)]}",
@@ -45,7 +45,9 @@ public sealed class WslDockerDiscoveryProvider : IDiscoveryProvider
                             | ServiceBusCapabilities.Purge
                             | ServiceBusCapabilities.SubscriptionRules,
                 ConfiguredQueues: queues,
-                ConfiguredTopics: topics
+                ConfiguredTopics: topics,
+                ContainerId: e.ContainerId,
+                ConfigFilePath: configPath
             ));
         }
 
@@ -115,10 +117,11 @@ public sealed class WslDockerDiscoveryProvider : IDiscoveryProvider
         return results;
     }
 
-    private async Task<(List<ConfiguredQueue> Queues, List<ConfiguredTopic> Topics)> ExtractEntitiesFromContainerAsync(string containerId, CancellationToken ct)
+    private async Task<(List<ConfiguredQueue> Queues, List<ConfiguredTopic> Topics, string? ConfigPath)> ExtractEntitiesFromContainerAsync(string containerId, CancellationToken ct)
     {
         var queues = new List<ConfiguredQueue>();
         var topics = new List<ConfiguredTopic>();
+        string? resolvedConfigPath = null;
 
         try
         {
@@ -160,6 +163,7 @@ public sealed class WslDockerDiscoveryProvider : IDiscoveryProvider
 
                 if (File.Exists(winPath))
                 {
+                    resolvedConfigPath = winPath;
                     configJsonContent = await File.ReadAllTextAsync(winPath, ct);
                 }
             }
@@ -248,7 +252,7 @@ public sealed class WslDockerDiscoveryProvider : IDiscoveryProvider
             _logger.LogDebug(ex, "Could not extract entities from emulator {ContainerId}", containerId);
         }
 
-        return (queues, topics);
+        return (queues, topics, resolvedConfigPath);
     }
 
     private async Task<string> RunCommandAsync(string dockerArgs, CancellationToken ct)
