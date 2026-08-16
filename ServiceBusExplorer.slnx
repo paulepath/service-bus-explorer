@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ServiceBusExplorer.Api/ServiceBusExplorer.Api.csproj" />
+    <Project Path="src/ServiceBusExplorer.AzureServiceBus/ServiceBusExplorer.AzureServiceBus.csproj" />
+    <Project Path="src/ServiceBusExplorer.Core/ServiceBusExplorer.Core.csproj" />
+    <Project Path="src/ServiceBusExplorer.Desktop/ServiceBusExplorer.Desktop.csproj" />
+    <Project Path="src/ServiceBusExplorer.Discovery/ServiceBusExplorer.Discovery.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ServiceBusExplorer.Api.Tests/ServiceBusExplorer.Api.Tests.csproj" />
+    <Project Path="tests/ServiceBusExplorer.Core.Tests/ServiceBusExplorer.Core.Tests.csproj" />
+    <Project Path="tests/ServiceBusExplorer.IntegrationTests/ServiceBusExplorer.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

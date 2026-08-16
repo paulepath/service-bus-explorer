@@ -1,0 +1,32 @@
+services:
+  sqledge:
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    container_name: "sbe-test-sqledge"
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Password123!"
+    networks:
+      - sbe-test-net
+
+  emulator:
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
+    container_name: "sbe-test-emulator"
+    restart: unless-stopped
+    ports:
+      - "5673:5672"
+      - "5301:5300"
+    volumes:
+      - ./Config.json:/ServiceBus_Emulator/ConfigFiles/Config.json:ro
+    environment:
+      SQL_SERVER: sqledge
+      MSSQL_SA_PASSWORD: "Password123!"
+      ACCEPT_EULA: "Y"
+    depends_on:
+      - sqledge
+    networks:
+      - sbe-test-net
+
+networks:
+  sbe-test-net:
+    driver: bridge

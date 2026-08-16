@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ServiceBusExplorer.Api\ServiceBusExplorer.Api.csproj" />
+    <ProjectReference Include="..\ServiceBusExplorer.AzureServiceBus\ServiceBusExplorer.AzureServiceBus.csproj" />
+    <ProjectReference Include="..\ServiceBusExplorer.Core\ServiceBusExplorer.Core.csproj" />
+    <ProjectReference Include="..\ServiceBusExplorer.Discovery\ServiceBusExplorer.Discovery.csproj" />
+  </ItemGroup>
+
+</Project>

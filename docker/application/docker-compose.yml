@@ -1,0 +1,11 @@
+services:
+  servicebus-explorer:
+    build:
+      context: ../..
+      dockerfile: docker/application/Dockerfile
+    container_name: "servicebus-explorer"
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
