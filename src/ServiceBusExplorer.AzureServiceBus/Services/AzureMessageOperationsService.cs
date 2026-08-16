@@ -34,7 +34,7 @@ public sealed class AzureMessageOperationsService : IMessageOperationsService
         var profile = await GetRequiredConnectionAsync(connectionId, ct);
         var client = _clientCache.GetClient(profile);
 
-        var receiverOptions = new ServiceBusReceiverOptions
+        var options = new ServiceBusReceiverOptions
         {
             SubQueue = subQueue switch
             {
@@ -44,54 +44,46 @@ public sealed class AzureMessageOperationsService : IMessageOperationsService
             }
         };
 
-        await using var receiver = CreateReceiver(client, entityPath, receiverOptions);
+        await using var receiver = CreateReceiver(client, entityPath, options);
 
-        IReadOnlyList<ServiceBusReceivedMessage> peeked;
+        IReadOnlyList<ServiceBusReceivedMessage> messages;
         if (fromSequenceNumber.HasValue)
         {
-            peeked = await receiver.PeekMessagesAsync(maxMessages, fromSequenceNumber.Value, ct);
+            messages = await receiver.PeekMessagesAsync(maxMessages, fromSequenceNumber.Value, ct);
         }
         else
         {
-            peeked = await receiver.PeekMessagesAsync(maxMessages, cancellationToken: ct);
+            messages = await receiver.PeekMessagesAsync(maxMessages, cancellationToken: ct);
         }
 
-        return peeked.Select(m => MessageConverter.ToDto(m, subQueue)).ToList();
+        return messages.Select(m => MessageConverter.ToDto(m, subQueue)).ToList();
     }
 
     public async Task<SendMessageResult> SendMessageAsync(
         string connectionId,
-        EntityPath destination,
+        EntityPath entityPath,
         SendMessageRequest request,
         CancellationToken ct = default)
     {
         var profile = await GetRequiredConnectionAsync(connectionId, ct);
         var client = _clientCache.GetClient(profile);
 
-        string targetName = destination.Type switch
+        string destination = entityPath.Type switch
         {
-            EntityType.Queue => destination.Name,
-            EntityType.Topic => destination.Name,
-            _ => throw new InvalidOperationException($"Cannot send directly to entity of type {destination.Type}")
+            EntityType.Queue => entityPath.Name,
+            EntityType.Topic => entityPath.Name,
+            EntityType.Subscription => entityPath.TopicName ?? entityPath.Name,
+            _ => throw new InvalidOperationException($"Unsupported entity type {entityPath.Type}")
         };
 
-        await using var sender = client.CreateSender(targetName);
+        await using var sender = client.CreateSender(destination);
         var message = MessageConverter.ToServiceBusMessage(request);
 
         try
         {
-            if (request.ScheduledEnqueueTime.HasValue && request.ScheduledEnqueueTime.Value > DateTimeOffset.UtcNow)
-            {
-                long seq = await sender.ScheduleMessageAsync(message, request.ScheduledEnqueueTime.Value, ct);
-                _logger.LogInformation("Scheduled message {MessageId} to {Destination} with sequence {Seq}", message.MessageId, destination, seq);
-                return new SendMessageResult(true, message.MessageId, seq);
-            }
-            else
-            {
-                await sender.SendMessageAsync(message, ct);
-                _logger.LogInformation("Sent message {MessageId} to {Destination}", message.MessageId, destination);
-                return new SendMessageResult(true, message.MessageId);
-            }
+            await sender.SendMessageAsync(message, ct);
+            _logger.LogInformation("Sent message {MessageId} to {Destination}", message.MessageId, destination);
+            return new SendMessageResult(true, message.MessageId);
         }
         catch (Exception ex)
         {
@@ -118,19 +110,44 @@ public sealed class AzureMessageOperationsService : IMessageOperationsService
         await using var dlqReceiver = CreateReceiver(client, sourcePath, dlqOptions);
 
         ServiceBusReceivedMessage? lockedMessage = null;
+        var unneededMessages = new List<ServiceBusReceivedMessage>();
 
-        // Try to receive batch in PeekLock to find the specific message by sequence number
-        var receivedBatch = await dlqReceiver.ReceiveMessagesAsync(maxMessages: 20, maxWaitTime: TimeSpan.FromSeconds(3), cancellationToken: ct);
-        lockedMessage = receivedBatch.FirstOrDefault(m => m.SequenceNumber == request.SequenceNumber)
-                     ?? receivedBatch.FirstOrDefault();
-
-        if (lockedMessage == null)
+        // Receive up to 50 DLQ messages to locate the target sequence number
+        for (int i = 0; i < 5; i++)
         {
-            return new ResendDeadLetterResult(false, string.Empty, false, $"Could not find or lock message with sequence {request.SequenceNumber} in DLQ.");
+            var receivedBatch = await dlqReceiver.ReceiveMessagesAsync(maxMessages: 10, maxWaitTime: TimeSpan.FromSeconds(1), cancellationToken: ct);
+            if (receivedBatch == null || receivedBatch.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var msg in receivedBatch)
+            {
+                if (lockedMessage == null && msg.SequenceNumber == request.SequenceNumber)
+                {
+                    lockedMessage = msg;
+                }
+                else
+                {
+                    unneededMessages.Add(msg);
+                }
+            }
+
+            if (lockedMessage != null)
+            {
+                break;
+            }
         }
 
-        // Release other messages in the batch that weren't the target
-        foreach (var other in receivedBatch.Where(m => m.SequenceNumber != lockedMessage.SequenceNumber))
+        // If exact sequence was not found, take first if only 1 message in DLQ or fallback
+        if (lockedMessage == null && unneededMessages.Count > 0)
+        {
+            lockedMessage = unneededMessages[0];
+            unneededMessages.RemoveAt(0);
+        }
+
+        // Release any extra messages back to DLQ
+        foreach (var other in unneededMessages)
         {
             try
             {
@@ -140,6 +157,11 @@ public sealed class AzureMessageOperationsService : IMessageOperationsService
             {
                 _logger.LogDebug(ex, "Failed to abandon extra locked DLQ message {Seq}", other.SequenceNumber);
             }
+        }
+
+        if (lockedMessage == null)
+        {
+            return new ResendDeadLetterResult(false, string.Empty, false, $"Could not find or lock message with sequence {request.SequenceNumber} in DLQ.");
         }
 
         string targetDestination = !string.IsNullOrWhiteSpace(request.TargetQueueOrTopic)
@@ -156,19 +178,17 @@ public sealed class AzureMessageOperationsService : IMessageOperationsService
         else
         {
             // Re-create from original
-            messageToSend = new ServiceBusMessage(lockedMessage.Body)
-            {
-                MessageId = lockedMessage.MessageId,
-                CorrelationId = lockedMessage.CorrelationId,
-                Subject = lockedMessage.Subject,
-                ContentType = lockedMessage.ContentType,
-                To = lockedMessage.To,
-                ReplyTo = lockedMessage.ReplyTo,
-                ReplyToSessionId = lockedMessage.ReplyToSessionId,
-                SessionId = lockedMessage.SessionId,
-                PartitionKey = lockedMessage.PartitionKey,
-                TimeToLive = lockedMessage.TimeToLive
-            };
+            messageToSend = new ServiceBusMessage(lockedMessage.Body);
+            if (!string.IsNullOrWhiteSpace(lockedMessage.MessageId)) messageToSend.MessageId = lockedMessage.MessageId;
+            if (!string.IsNullOrWhiteSpace(lockedMessage.CorrelationId)) messageToSend.CorrelationId = lockedMessage.CorrelationId;
+            if (!string.IsNullOrWhiteSpace(lockedMessage.Subject)) messageToSend.Subject = lockedMessage.Subject;
+            if (!string.IsNullOrWhiteSpace(lockedMessage.ContentType)) messageToSend.ContentType = lockedMessage.ContentType;
+            if (!string.IsNullOrWhiteSpace(lockedMessage.To)) messageToSend.To = lockedMessage.To;
+            if (!string.IsNullOrWhiteSpace(lockedMessage.ReplyTo)) messageToSend.ReplyTo = lockedMessage.ReplyTo;
+            if (!string.IsNullOrWhiteSpace(lockedMessage.ReplyToSessionId)) messageToSend.ReplyToSessionId = lockedMessage.ReplyToSessionId;
+            if (!string.IsNullOrWhiteSpace(lockedMessage.SessionId)) messageToSend.SessionId = lockedMessage.SessionId;
+            if (!string.IsNullOrWhiteSpace(lockedMessage.PartitionKey)) messageToSend.PartitionKey = lockedMessage.PartitionKey;
+            if (lockedMessage.TimeToLive > TimeSpan.Zero && lockedMessage.TimeToLive < TimeSpan.FromDays(365)) messageToSend.TimeToLive = lockedMessage.TimeToLive;
 
             foreach (var (k, v) in lockedMessage.ApplicationProperties)
             {
@@ -260,26 +280,28 @@ public sealed class AzureMessageOperationsService : IMessageOperationsService
         int totalPurged = 0;
         while (totalPurged < maxCount)
         {
-            int batchSize = Math.Min(50, maxCount - totalPurged);
-            var messages = await receiver.ReceiveMessagesAsync(batchSize, TimeSpan.FromSeconds(2), ct);
-            if (messages.Count == 0)
+            int batchToFetch = Math.Min(100, maxCount - totalPurged);
+            var messages = await receiver.ReceiveMessagesAsync(batchToFetch, TimeSpan.FromSeconds(1), ct);
+            if (messages == null || messages.Count == 0)
+            {
                 break;
-
+            }
             totalPurged += messages.Count;
         }
 
-        _logger.LogInformation("Purged {Count} messages from {Path} (SubQueue: {SubQueue})", totalPurged, entityPath, subQueue);
+        _logger.LogInformation("Purged {Count} messages from {Path} ({SubQueue})", totalPurged, entityPath, subQueue);
         return totalPurged;
     }
 
-    private static ServiceBusReceiver CreateReceiver(ServiceBusClient client, EntityPath entityPath, ServiceBusReceiverOptions options)
+    private ServiceBusReceiver CreateReceiver(ServiceBusClient client, EntityPath path, ServiceBusReceiverOptions options)
     {
-        return entityPath.Type switch
+        return path.Type switch
         {
-            EntityType.Queue => client.CreateReceiver(entityPath.Name, options),
-            EntityType.Subscription when entityPath.TopicName != null && entityPath.SubscriptionName != null =>
-                client.CreateReceiver(entityPath.TopicName, entityPath.SubscriptionName, options),
-            _ => throw new InvalidOperationException($"Cannot create receiver for entity type {entityPath.Type}")
+            EntityType.Queue => client.CreateReceiver(path.Name, options),
+            EntityType.Topic => client.CreateReceiver(path.Name, options),
+            EntityType.Subscription when path.TopicName != null && path.SubscriptionName != null =>
+                client.CreateReceiver(path.TopicName, path.SubscriptionName, options),
+            _ => throw new InvalidOperationException($"Cannot create receiver for entity type {path.Type}")
         };
     }
 

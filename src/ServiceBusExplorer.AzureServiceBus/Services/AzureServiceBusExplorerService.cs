@@ -14,15 +14,18 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
     private readonly IConnectionManager _connectionManager;
     private readonly IServiceBusClientCache _clientCache;
     private readonly ILogger<AzureServiceBusExplorerService> _logger;
+    private readonly IDiscoveryProvider? _discoveryProvider;
 
     public AzureServiceBusExplorerService(
         IConnectionManager connectionManager,
         IServiceBusClientCache clientCache,
-        ILogger<AzureServiceBusExplorerService> logger)
+        ILogger<AzureServiceBusExplorerService> logger,
+        IDiscoveryProvider? discoveryProvider = null)
     {
         _connectionManager = connectionManager;
         _clientCache = clientCache;
         _logger = logger;
+        _discoveryProvider = discoveryProvider;
     }
 
     public async Task<NamespaceOverview> GetNamespaceOverviewAsync(string connectionId, CancellationToken ct = default)
@@ -78,9 +81,8 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
                             RetrievedAt: DateTimeOffset.UtcNow
                         );
                     }
-                    catch (Exception ex)
+                    catch
                     {
-                        _logger.LogDebug(ex, "Could not fetch runtime properties for queue {QueueName}", queue.Name);
                         counts = await EstimateCountsViaReceiverAsync(profile, EntityPath.ForQueue(queue.Name), ct);
                     }
 
@@ -193,26 +195,40 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
                             {
                                 await foreach (var rule in adminClient.GetRulesAsync(topic.Name, sub.SubscriptionName, ct))
                                 {
+                                    string filterType = "Unknown";
+                                    string? filterExpr = null;
+                                    string? actionExpr = rule.Action?.ToString();
+
+                                    if (rule.Filter is SqlRuleFilter sqlFilter)
+                                    {
+                                        filterType = "Sql";
+                                        filterExpr = sqlFilter.SqlExpression;
+                                    }
+                                    else if (rule.Filter is CorrelationRuleFilter corrFilter)
+                                    {
+                                        filterType = "Correlation";
+                                        filterExpr = $"CorrelationId={corrFilter.CorrelationId}, Subject={corrFilter.Subject}";
+                                    }
+                                    else if (rule.Filter is TrueRuleFilter)
+                                    {
+                                        filterType = "TrueFilter";
+                                    }
+                                    else if (rule.Filter is FalseRuleFilter)
+                                    {
+                                        filterType = "FalseFilter";
+                                    }
+
                                     rules.Add(new SubscriptionRuleSummary(
                                         Name: rule.Name,
-                                        FilterType: rule.Filter.GetType().Name,
-                                        FilterExpression: rule.Filter switch
-                                        {
-                                            SqlRuleFilter sql => sql.SqlExpression,
-                                            CorrelationRuleFilter cor => $"CorrelationId: {cor.CorrelationId}, Subject: {cor.Subject}",
-                                            _ => rule.Filter.ToString()
-                                        },
-                                        ActionExpression: rule.Action switch
-                                        {
-                                            SqlRuleAction sqlAction => sqlAction.SqlExpression,
-                                            _ => null
-                                        }
+                                        FilterType: filterType,
+                                        FilterExpression: filterExpr,
+                                        ActionExpression: actionExpr
                                     ));
                                 }
                             }
-                            catch (Exception ex)
+                            catch
                             {
-                                _logger.LogDebug(ex, "Could not fetch rules for subscription {Sub} on topic {Topic}", sub.SubscriptionName, topic.Name);
+                                // Ignore rule fetching errors
                             }
 
                             subscriptions.Add(new SubscriptionSummary(
@@ -233,7 +249,7 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogDebug(ex, "Could not enumerate subscriptions for topic {Topic}", topic.Name);
+                        _logger.LogInformation(ex, "Failed to get subscriptions for topic {Topic}", topic.Name);
                     }
 
                     result.Add(new TopicSummary(
@@ -648,18 +664,19 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
                     },
                     ["Logging"] = new JsonObject
                     {
-                        ["Type"] = "File"
+                        ["Type"] = "Console"
                     }
                 }
             };
 
             var options = new JsonSerializerOptions { WriteIndented = true };
-            string jsonString = jsonObject.ToJsonString(options);
-            await File.WriteAllTextAsync(profile.ConfigFilePath, jsonString, ct);
+            var json = jsonObject.ToJsonString(options);
+            await File.WriteAllTextAsync(profile.ConfigFilePath, json, ct);
+            _logger.LogInformation("Persisted updated Config.json to {Path}", profile.ConfigFilePath);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not persist Config.json to {Path}", profile.ConfigFilePath);
+            _logger.LogWarning(ex, "Failed to persist Config.json to {Path}", profile.ConfigFilePath);
         }
     }
 
@@ -731,6 +748,13 @@ public sealed class AzureServiceBusExplorerService : IServiceBusExplorerService
     private async Task<ConnectionProfile> GetRequiredConnectionAsync(string connectionId, CancellationToken ct)
     {
         var profile = await _connectionManager.GetConnectionAsync(connectionId, ct);
+        if (profile == null && _discoveryProvider != null && connectionId.StartsWith("discovered-", StringComparison.OrdinalIgnoreCase))
+        {
+            var discovered = await _discoveryProvider.DiscoverAsync(ct);
+            await _connectionManager.RegisterDiscoveredConnectionsAsync(discovered, ct);
+            profile = await _connectionManager.GetConnectionAsync(connectionId, ct);
+        }
+
         if (profile == null)
         {
             throw new KeyNotFoundException($"Connection '{connectionId}' was not found.");

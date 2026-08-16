@@ -4,6 +4,7 @@ using Microsoft.Extensions.FileProviders;
 using ServiceBusExplorer.Api.Endpoints;
 using ServiceBusExplorer.AzureServiceBus.Extensions;
 using ServiceBusExplorer.Core.Converters;
+using ServiceBusExplorer.Core.Services;
 using ServiceBusExplorer.Discovery.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -36,6 +37,20 @@ builder.Services.AddDiscoveryServices();
 var app = builder.Build();
 
 app.UseCors();
+
+// Run initial discovery
+try
+{
+    using var scope = app.Services.CreateScope();
+    var discovery = scope.ServiceProvider.GetService<IDiscoveryProvider>();
+    var manager = scope.ServiceProvider.GetService<IConnectionManager>();
+    if (discovery != null && manager != null)
+    {
+        var discovered = await discovery.DiscoverAsync();
+        await manager.RegisterDiscoveredConnectionsAsync(discovered);
+    }
+}
+catch { }
 
 // Serve Angular static files if dist folder exists
 string webDistPath = Path.Combine(app.Environment.ContentRootPath, "..", "ServiceBusExplorer.Web", "dist", "ServiceBusExplorer.Web", "browser");

@@ -8,29 +8,56 @@
             "Name": "normal-queue",
             "Properties": {
               "LockDuration": "PT1M",
-              "MaxDeliveryCount": 10
+              "MaxDeliveryCount": 10,
+              "RequiresSession": false
             }
           },
           {
             "Name": "deadletter-test",
             "Properties": {
               "LockDuration": "PT1M",
-              "MaxDeliveryCount": 1
+              "MaxDeliveryCount": 1,
+              "RequiresSession": false
             }
           },
           {
             "Name": "scheduled-test",
             "Properties": {
               "LockDuration": "PT1M",
-              "MaxDeliveryCount": 10
+              "MaxDeliveryCount": 10,
+              "RequiresSession": false
             }
           },
           {
             "Name": "session-test",
             "Properties": {
-              "RequiresSession": true,
               "LockDuration": "PT1M",
-              "MaxDeliveryCount": 10
+              "MaxDeliveryCount": 10,
+              "RequiresSession": true
+            }
+          },
+          {
+            "Name": "pw-test-queue-1786874386295",
+            "Properties": {
+              "LockDuration": "PT1M",
+              "MaxDeliveryCount": 5,
+              "RequiresSession": false
+            }
+          },
+          {
+            "Name": "pw-test-queue-1786874408103",
+            "Properties": {
+              "LockDuration": "PT1M",
+              "MaxDeliveryCount": 5,
+              "RequiresSession": false
+            }
+          },
+          {
+            "Name": "pw-test-queue-1786874428814",
+            "Properties": {
+              "LockDuration": "PT1M",
+              "MaxDeliveryCount": 5,
+              "RequiresSession": false
             }
           }
         ],
@@ -45,18 +72,17 @@
               },
               {
                 "Name": "subscription-filtered",
-                "Properties": {},
-                "Rules": [
-                  {
-                    "Name": "importance-filter",
-                    "Properties": {
-                      "FilterType": "CorrelationFilter",
-                      "CorrelationFilter": {
-                        "Subject": "important"
-                      }
-                    }
-                  }
-                ]
+                "Properties": {}
+              }
+            ]
+          },
+          {
+            "Name": "pw-test-topic-1786874389690",
+            "Properties": {},
+            "Subscriptions": [
+              {
+                "Name": "pw-test-sub-1786874389690",
+                "Properties": {}
               }
             ]
           }
@@ -64,7 +90,7 @@
       }
     ],
     "Logging": {
-      "Type": "File"
+      "Type": "Console"
     }
   }
 }

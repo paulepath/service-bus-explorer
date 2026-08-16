@@ -97,14 +97,33 @@ public static class MessageConverter
         {
             foreach (var (k, v) in request.ApplicationProperties)
             {
-                if (v is not null)
+                var unwrapped = UnwrapJsonElement(v);
+                if (unwrapped is not null)
                 {
-                    message.ApplicationProperties[k] = v;
+                    message.ApplicationProperties[k] = unwrapped;
                 }
             }
         }
 
         return message;
+    }
+
+    private static object? UnwrapJsonElement(object? value)
+    {
+        if (value is JsonElement element)
+        {
+            return element.ValueKind switch
+            {
+                JsonValueKind.String => element.GetString(),
+                JsonValueKind.Number when element.TryGetInt64(out long l) => l,
+                JsonValueKind.Number when element.TryGetDouble(out double d) => d,
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Null => null,
+                _ => element.GetRawText()
+            };
+        }
+        return value;
     }
 
     public static (string? Text, MessagePayloadFormat Format) DetectFormatAndExtractText(byte[] rawBytes, string? contentType)

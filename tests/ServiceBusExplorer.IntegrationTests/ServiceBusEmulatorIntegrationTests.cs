@@ -112,6 +112,10 @@ public class ServiceBusEmulatorIntegrationTests : IAsyncDisposable
     {
         // Arrange: send a message directly to deadletter-test queue and let it go to DLQ or dead-letter it
         var client = _clientCache.GetClient(_profile);
+        // Clean queues before test
+        await _messageOps.PurgeMessagesAsync(_profile.Id, EntityPath.ForQueue("deadletter-test"), SubQueueType.DeadLetter, maxCount: 100);
+        await _messageOps.PurgeMessagesAsync(_profile.Id, EntityPath.ForQueue("normal-queue"), SubQueueType.None, maxCount: 100);
+
         var sender = client.CreateSender("deadletter-test");
 
         string testMessageId = $"dlq-orig-{Guid.NewGuid():N}";
