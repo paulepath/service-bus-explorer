@@ -122,10 +122,14 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
     </aside>
   `,
   styles: [`
+    :host {
+      display: block;
+      height: 100%;
+      overflow: hidden;
+    }
     .sidebar {
-      width: 280px;
+      width: 100%;
       background: var(--bg-sidebar);
-      border-right: 1px solid var(--border-color);
       display: flex;
       flex-direction: column;
       height: 100%;

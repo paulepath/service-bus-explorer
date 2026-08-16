@@ -91,10 +91,14 @@ import { PropertyGridComponent } from '../../shared/components/property-grid.com
     </aside>
   `,
   styles: [`
+    :host {
+      display: block;
+      height: 100%;
+      overflow: hidden;
+    }
     .detail-pane {
-      width: 440px;
+      width: 100%;
       background: var(--bg-sidebar);
-      border-left: 1px solid var(--border-color);
       display: flex;
       flex-direction: column;
       height: 100%;

@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { StateService } from './core/services/state.service';
 import { ThemeService } from './core/services/theme.service';
@@ -23,7 +23,7 @@ import { SendMessageRequest, ServiceBusMessageDto } from './core/models/service-
     ResendModalComponent
   ],
   template: `
-    <div class="app-layout">
+    <div class="app-layout" [class.resizing]="isResizing()">
       <!-- Top Title Bar -->
       <header class="app-header">
         <div class="brand">
@@ -54,14 +54,41 @@ import { SendMessageRequest, ServiceBusMessageDto } from './core/models/service-
         </div>
       </header>
 
-      <!-- Main 3-Pane Body -->
+      <!-- Main 3-Pane Body with Draggable Splitters -->
       <div class="app-body">
-        <app-sidebar (openConnectModal)="showConnectModal.set(true)"></app-sidebar>
-        <app-message-list
-          (openSendModal)="openNewSendModal()"
-          (cloneMessage)="openCloneModal($event)"
-          (resendDlqMessage)="openResendModal($event)"></app-message-list>
-        <app-message-detail></app-message-detail>
+        <!-- Sidebar (Left Pane) -->
+        <div class="pane-sidebar" [style.width.px]="sidebarWidth()">
+          <app-sidebar (openConnectModal)="showConnectModal.set(true)"></app-sidebar>
+        </div>
+
+        <!-- Left Splitter Handle -->
+        <div
+          class="splitter-gutter splitter-left"
+          title="Drag to resize sidebar"
+          (mousedown)="startResize('sidebar', $event)">
+          <div class="splitter-line"></div>
+        </div>
+
+        <!-- Message List (Center Pane) -->
+        <div class="pane-center">
+          <app-message-list
+            (openSendModal)="openNewSendModal()"
+            (cloneMessage)="openCloneModal($event)"
+            (resendDlqMessage)="openResendModal($event)"></app-message-list>
+        </div>
+
+        <!-- Right Splitter Handle -->
+        <div
+          class="splitter-gutter splitter-right"
+          title="Drag to resize message detail inspector"
+          (mousedown)="startResize('detail', $event)">
+          <div class="splitter-line"></div>
+        </div>
+
+        <!-- Message Detail Inspector (Right Pane) -->
+        <div class="pane-detail" [style.width.px]="detailWidth()">
+          <app-message-detail></app-message-detail>
+        </div>
       </div>
 
       <!-- Status Bar -->
@@ -111,6 +138,10 @@ import { SendMessageRequest, ServiceBusMessageDto } from './core/models/service-
       background: var(--bg-main);
       color: var(--text-main);
     }
+    .app-layout.resizing {
+      user-select: none;
+      cursor: col-resize !important;
+    }
     .app-header {
       height: 42px;
       background: var(--bg-header);
@@ -120,6 +151,7 @@ import { SendMessageRequest, ServiceBusMessageDto } from './core/models/service-
       justify-content: space-between;
       padding: 0 16px;
       user-select: none;
+      z-index: 10;
     }
     .brand {
       display: flex;
@@ -194,6 +226,50 @@ import { SendMessageRequest, ServiceBusMessageDto } from './core/models/service-
       flex: 1;
       display: flex;
       overflow: hidden;
+      position: relative;
+    }
+    .pane-sidebar {
+      height: 100%;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .pane-center {
+      flex: 1;
+      height: 100%;
+      min-width: 250px;
+      overflow: hidden;
+    }
+    .pane-detail {
+      height: 100%;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .splitter-gutter {
+      width: 6px;
+      height: 100%;
+      cursor: col-resize;
+      background: var(--border-color);
+      position: relative;
+      flex-shrink: 0;
+      z-index: 5;
+      transition: background 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .splitter-gutter:hover, .app-layout.resizing .splitter-gutter {
+      background: var(--accent-primary);
+    }
+    .splitter-line {
+      width: 2px;
+      height: 24px;
+      border-radius: 1px;
+      background: var(--text-dim);
+      opacity: 0.6;
+    }
+    .splitter-gutter:hover .splitter-line {
+      background: #ffffff;
+      opacity: 1;
     }
     .app-statusbar {
       height: 24px;
@@ -206,6 +282,7 @@ import { SendMessageRequest, ServiceBusMessageDto } from './core/models/service-
       font-size: 11px;
       color: var(--text-dim);
       user-select: none;
+      z-index: 10;
     }
     .status-left {
       display: flex;
@@ -236,6 +313,10 @@ export class App implements OnInit {
   state = inject(StateService);
   themeService = inject(ThemeService);
 
+  sidebarWidth = signal<number>(280);
+  detailWidth = signal<number>(440);
+  isResizing = signal<boolean>(false);
+
   showConnectModal = signal<boolean>(false);
   showSendModal = signal<boolean>(false);
   showResendModal = signal<boolean>(false);
@@ -243,8 +324,64 @@ export class App implements OnInit {
   sendModalInitialData?: SendMessageRequest;
   selectedDlqMessage?: ServiceBusMessageDto;
 
+  private activeResizer: 'sidebar' | 'detail' | null = null;
+  private startX = 0;
+  private startWidth = 0;
+
   ngOnInit(): void {
+    const savedSidebar = localStorage.getItem('sbe_sidebar_width');
+    if (savedSidebar) {
+      const parsed = parseInt(savedSidebar, 10);
+      if (!isNaN(parsed) && parsed >= 180 && parsed <= 600) {
+        this.sidebarWidth.set(parsed);
+      }
+    }
+
+    const savedDetail = localStorage.getItem('sbe_detail_width');
+    if (savedDetail) {
+      const parsed = parseInt(savedDetail, 10);
+      if (!isNaN(parsed) && parsed >= 280 && parsed <= 900) {
+        this.detailWidth.set(parsed);
+      }
+    }
+
     this.state.init();
+  }
+
+  startResize(pane: 'sidebar' | 'detail', event: MouseEvent): void {
+    event.preventDefault();
+    this.activeResizer = pane;
+    this.startX = event.clientX;
+    this.startWidth = pane === 'sidebar' ? this.sidebarWidth() : this.detailWidth();
+    this.isResizing.set(true);
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!this.activeResizer) return;
+      const delta = e.clientX - this.startX;
+
+      if (this.activeResizer === 'sidebar') {
+        const newWidth = Math.max(180, Math.min(600, this.startWidth + delta));
+        this.sidebarWidth.set(newWidth);
+      } else if (this.activeResizer === 'detail') {
+        const newWidth = Math.max(280, Math.min(window.innerWidth - 450, this.startWidth - delta));
+        this.detailWidth.set(newWidth);
+      }
+    };
+
+    const onMouseUp = () => {
+      if (this.activeResizer === 'sidebar') {
+        localStorage.setItem('sbe_sidebar_width', this.sidebarWidth().toString());
+      } else if (this.activeResizer === 'detail') {
+        localStorage.setItem('sbe_detail_width', this.detailWidth().toString());
+      }
+      this.activeResizer = null;
+      this.isResizing.set(false);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
   }
 
   openNewSendModal() {
