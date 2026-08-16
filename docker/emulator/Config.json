@@ -59,6 +59,30 @@
               "MaxDeliveryCount": 5,
               "RequiresSession": false
             }
+          },
+          {
+            "Name": "orders/priority/uk",
+            "Properties": {
+              "LockDuration": "PT1M",
+              "MaxDeliveryCount": 10,
+              "RequiresSession": false
+            }
+          },
+          {
+            "Name": "orders/priority/us",
+            "Properties": {
+              "LockDuration": "PT1M",
+              "MaxDeliveryCount": 10,
+              "RequiresSession": false
+            }
+          },
+          {
+            "Name": "notifications\\email",
+            "Properties": {
+              "LockDuration": "PT1M",
+              "MaxDeliveryCount": 10,
+              "RequiresSession": false
+            }
           }
         ],
         "Topics": [
@@ -85,6 +109,26 @@
                 "Properties": {}
               }
             ]
+          },
+          {
+            "Name": "my/test/sub",
+            "Properties": {},
+            "Subscriptions": []
+          },
+          {
+            "Name": "my/somethingelse",
+            "Properties": {},
+            "Subscriptions": []
+          },
+          {
+            "Name": "epath\\test",
+            "Properties": {},
+            "Subscriptions": []
+          },
+          {
+            "Name": "epath\\test2",
+            "Properties": {},
+            "Subscriptions": []
           }
         ]
       }

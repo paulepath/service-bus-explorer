@@ -1,8 +1,9 @@
-import { Component, EventEmitter, Output, inject } from '@angular/core';
+import { Component, EventEmitter, Output, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { StateService } from '../../core/services/state.service';
 import { ApiService } from '../../core/services/api.service';
-import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus.models';
+import { QueueSummary, TopicSummary } from '../../core/models/service-bus.models';
+import { TreeNode, buildHierarchicalTree } from './sidebar-tree.models';
 
 @Component({
   selector: 'app-sidebar',
@@ -40,7 +41,7 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
 
       <!-- Entity Tree -->
       <div class="tree-container">
-        <!-- Queues -->
+        <!-- Queues Group -->
         <div class="tree-group">
           <div class="group-header">
             <div class="group-title-left">
@@ -53,31 +54,8 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
           </div>
 
           <div class="group-items">
-            @for (q of state.queues(); track q.name) {
-              <div
-                class="tree-item"
-                [class.selected]="isSelected('queue', q.name)"
-                (click)="selectQueue(q)">
-                <span class="item-icon">📬</span>
-                <span class="item-name" [title]="q.name">{{ q.name }}</span>
-
-                <div class="item-badges">
-                  <span class="badge badge-blue" [title]="'Active messages: ' + q.counts.activeMessageCount">
-                    {{ q.counts.activeMessageCount }}
-                  </span>
-                  @if (q.counts.deadLetterMessageCount > 0) {
-                    <span class="badge badge-red" [title]="'Dead-letter messages: ' + q.counts.deadLetterMessageCount">
-                      {{ q.counts.deadLetterMessageCount }}
-                    </span>
-                  }
-                  <button
-                    class="item-action-btn delete-btn"
-                    title="Delete Queue"
-                    (click)="deleteQueue(q.name, $event)">
-                    🗑️
-                  </button>
-                </div>
-              </div>
+            @for (node of queueTree(); track node.fullPath) {
+              <ng-container *ngTemplateOutlet="queueNodeTpl; context: { $implicit: node, depth: 0 }"></ng-container>
             }
             @if (state.queues().length === 0) {
               <div class="empty-text">No queues found</div>
@@ -85,7 +63,7 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
           </div>
         </div>
 
-        <!-- Topics -->
+        <!-- Topics Group -->
         <div class="tree-group">
           <div class="group-header">
             <div class="group-title-left">
@@ -98,58 +76,8 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
           </div>
 
           <div class="group-items">
-            @for (t of state.topics(); track t.name) {
-              <div class="tree-topic">
-                <div class="tree-item topic-header">
-                  <span class="item-icon">📢</span>
-                  <span class="item-name" [title]="t.name">{{ t.name }}</span>
-
-                  <div class="item-badges">
-                    <button
-                      class="item-action-btn"
-                      title="Add Subscription"
-                      (click)="openCreateModal.emit({ type: 'subscription', parentTopicName: t.name }); $event.stopPropagation()">
-                      ➕
-                    </button>
-                    <button
-                      class="item-action-btn delete-btn"
-                      title="Delete Topic"
-                      (click)="deleteTopic(t.name, $event)">
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Subscriptions -->
-                <div class="subscription-list">
-                  @for (sub of t.subscriptions; track sub.subscriptionName) {
-                    <div
-                      class="tree-item sub-item"
-                      [class.selected]="isSelected('subscription', sub.subscriptionName, t.name)"
-                      (click)="selectSubscription(t.name, sub)">
-                      <span class="item-icon">↳ 📥</span>
-                      <span class="item-name" [title]="sub.subscriptionName">{{ sub.subscriptionName }}</span>
-
-                      <div class="item-badges">
-                        <span class="badge badge-blue" [title]="'Active: ' + sub.counts.activeMessageCount">
-                          {{ sub.counts.activeMessageCount }}
-                        </span>
-                        @if (sub.counts.deadLetterMessageCount > 0) {
-                          <span class="badge badge-red" [title]="'DLQ: ' + sub.counts.deadLetterMessageCount">
-                            {{ sub.counts.deadLetterMessageCount }}
-                          </span>
-                        }
-                        <button
-                          class="item-action-btn delete-btn"
-                          title="Delete Subscription"
-                          (click)="deleteSubscription(t.name, sub.subscriptionName, $event)">
-                          🗑️
-                        </button>
-                      </div>
-                    </div>
-                  }
-                </div>
-              </div>
+            @for (node of topicTree(); track node.fullPath) {
+              <ng-container *ngTemplateOutlet="topicNodeTpl; context: { $implicit: node, depth: 0 }"></ng-container>
             }
             @if (state.topics().length === 0) {
               <div class="empty-text">No topics found</div>
@@ -158,6 +86,137 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
         </div>
       </div>
     </aside>
+
+    <!-- Recursive Queue Node Template -->
+    <ng-template #queueNodeTpl let-node let-depth="depth">
+      @if (node.isFolder) {
+        <div class="folder-group" [style.padding-left.px]="depth * 10">
+          <div class="tree-item folder-item" (click)="toggleFolder(node.fullPath, $event)">
+            <span class="toggle-icon">{{ isExpanded(node.fullPath) ? '▼' : '▶' }}</span>
+            <span class="item-icon">{{ isExpanded(node.fullPath) ? '📂' : '📁' }}</span>
+            <span class="item-name folder-name" [title]="node.fullPath">{{ node.name }}</span>
+
+            @if ((node.totalActiveCount || 0) > 0 || (node.totalDlqCount || 0) > 0) {
+              <div class="item-badges">
+                @if ((node.totalActiveCount || 0) > 0) {
+                  <span class="badge badge-blue" title="Active messages in folder">{{ node.totalActiveCount }}</span>
+                }
+                @if ((node.totalDlqCount || 0) > 0) {
+                  <span class="badge badge-red" title="DLQ messages in folder">{{ node.totalDlqCount }}</span>
+                }
+              </div>
+            }
+          </div>
+
+          @if (isExpanded(node.fullPath)) {
+            <div class="folder-children">
+              @for (child of node.children; track child.fullPath) {
+                <ng-container *ngTemplateOutlet="queueNodeTpl; context: { $implicit: child, depth: depth + 1 }"></ng-container>
+              }
+            </div>
+          }
+        </div>
+      } @else if (node.item) {
+        <div
+          class="tree-item"
+          [style.padding-left.px]="depth * 10 + 8"
+          [class.selected]="isSelected('queue', node.item.name)"
+          (click)="selectQueue(node.item)">
+          <span class="item-icon">📬</span>
+          <span class="item-name" [title]="node.item.name">{{ node.name }}</span>
+
+          <div class="item-badges">
+            <span class="badge badge-blue" [title]="'Active messages: ' + node.item.counts.activeMessageCount">
+              {{ node.item.counts.activeMessageCount }}
+            </span>
+            @if (node.item.counts.deadLetterMessageCount > 0) {
+              <span class="badge badge-red" [title]="'Dead-letter messages: ' + node.item.counts.deadLetterMessageCount">
+                {{ node.item.counts.deadLetterMessageCount }}
+              </span>
+            }
+            <button
+              class="item-action-btn delete-btn"
+              title="Delete Queue"
+              (click)="deleteQueue(node.item.name, $event)">
+              🗑️
+            </button>
+          </div>
+        </div>
+      }
+    </ng-template>
+
+    <!-- Recursive Topic Node Template -->
+    <ng-template #topicNodeTpl let-node let-depth="depth">
+      @if (node.isFolder) {
+        <div class="folder-group" [style.padding-left.px]="depth * 10">
+          <div class="tree-item folder-item" (click)="toggleFolder(node.fullPath, $event)">
+            <span class="toggle-icon">{{ isExpanded(node.fullPath) ? '▼' : '▶' }}</span>
+            <span class="item-icon">{{ isExpanded(node.fullPath) ? '📂' : '📁' }}</span>
+            <span class="item-name folder-name" [title]="node.fullPath">{{ node.name }}</span>
+          </div>
+
+          @if (isExpanded(node.fullPath)) {
+            <div class="folder-children">
+              @for (child of node.children; track child.fullPath) {
+                <ng-container *ngTemplateOutlet="topicNodeTpl; context: { $implicit: child, depth: depth + 1 }"></ng-container>
+              }
+            </div>
+          }
+        </div>
+      } @else if (node.item) {
+        <div class="tree-topic" [style.padding-left.px]="depth * 10">
+          <div class="tree-item topic-header">
+            <span class="item-icon">📢</span>
+            <span class="item-name" [title]="node.item.name">{{ node.name }}</span>
+
+            <div class="item-badges">
+              <button
+                class="item-action-btn"
+                title="Add Subscription"
+                (click)="openCreateModal.emit({ type: 'subscription', parentTopicName: node.item.name }); $event.stopPropagation()">
+                ➕
+              </button>
+              <button
+                class="item-action-btn delete-btn"
+                title="Delete Topic"
+                (click)="deleteTopic(node.item.name, $event)">
+                🗑️
+              </button>
+            </div>
+          </div>
+
+          <!-- Subscriptions List -->
+          <div class="subscription-list">
+            @for (sub of node.item.subscriptions; track sub.subscriptionName) {
+              <div
+                class="tree-item sub-item"
+                [class.selected]="isSelected('subscription', sub.subscriptionName, node.item.name)"
+                (click)="selectSubscription(node.item.name, sub)">
+                <span class="item-icon">↳ 📥</span>
+                <span class="item-name" [title]="sub.subscriptionName">{{ sub.subscriptionName }}</span>
+
+                <div class="item-badges">
+                  <span class="badge badge-blue" [title]="'Active: ' + sub.counts.activeMessageCount">
+                    {{ sub.counts.activeMessageCount }}
+                  </span>
+                  @if (sub.counts.deadLetterMessageCount > 0) {
+                    <span class="badge badge-red" [title]="'DLQ: ' + sub.counts.deadLetterMessageCount">
+                      {{ sub.counts.deadLetterMessageCount }}
+                    </span>
+                  }
+                  <button
+                    class="item-action-btn delete-btn"
+                    title="Delete Subscription"
+                    (click)="deleteSubscription(node.item.name, sub.subscriptionName, $event)">
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </ng-template>
   `,
   styles: [`
     :host {
@@ -242,6 +301,24 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
       letter-spacing: 0.5px;
       color: var(--text-dim);
     }
+    .folder-group {
+      display: flex;
+      flex-direction: column;
+    }
+    .folder-item {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .folder-name {
+      color: var(--accent-primary) !important;
+      font-weight: 600;
+    }
+    .toggle-icon {
+      font-size: 9px;
+      width: 12px;
+      text-align: center;
+      color: var(--text-dim);
+    }
     .tree-item {
       display: flex;
       align-items: center;
@@ -292,7 +369,7 @@ import { ConnectionProfile, SelectedEntity } from '../../core/models/service-bus
       transform: scale(1.15);
     }
     .subscription-list {
-      padding-left: 12px;
+      padding-left: 14px;
     }
     .sub-item {
       padding: 4px 8px;
@@ -313,6 +390,26 @@ export class SidebarComponent {
   state = inject(StateService);
   private api = inject(ApiService);
 
+  private collapsedPaths = signal<Set<string>>(new Set<string>());
+
+  queueTree = computed(() => buildHierarchicalTree(this.state.queues()));
+  topicTree = computed(() => buildHierarchicalTree(this.state.topics()));
+
+  isExpanded(fullPath: string): boolean {
+    return !this.collapsedPaths().has(fullPath);
+  }
+
+  toggleFolder(fullPath: string, event: MouseEvent) {
+    event.stopPropagation();
+    const set = new Set(this.collapsedPaths());
+    if (set.has(fullPath)) {
+      set.delete(fullPath);
+    } else {
+      set.add(fullPath);
+    }
+    this.collapsedPaths.set(set);
+  }
+
   onConnectionChange(event: Event) {
     const target = event.target as HTMLSelectElement;
     const conn = this.state.connections().find(c => c.id === target.value);
@@ -321,7 +418,7 @@ export class SidebarComponent {
     }
   }
 
-  selectQueue(queue: any) {
+  selectQueue(queue: QueueSummary) {
     this.state.selectEntity({
       type: 'queue',
       name: queue.name,
