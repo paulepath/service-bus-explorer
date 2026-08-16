@@ -1,3 +1,5 @@
+// NOTE: '/' IS a valid Azure Service Bus name character (used for hierarchy, e.g. orders/uk/invoices).
+// Only '\' is invalid. ARM may display 'orders/uk' as 'orders~uk' but the SB name is unchanged.
 import { Component, EventEmitter, Input, Output, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -41,7 +43,7 @@ export type EntityCreationType = 'queue' | 'topic' | 'subscription';
                 (ngModelChange)="onNameChange($event)"
                 class="form-input"
                 [class.input-invalid]="nameValidationError()"
-                placeholder="e.g. orders-processing"
+                placeholder="e.g. orders-processing or orders/uk/invoices"
                 autofocus />
               @if (nameValidationError()) {
                 <div class="validation-hint">
@@ -235,8 +237,8 @@ export class CreateEntityModalComponent {
   errorMessage = signal<string>('');
   nameValidationError = signal<string>('');
 
-  /** Characters that Azure Service Bus rejects in entity names */
-  private static readonly INVALID_CHARS = /[\/\\]/;
+  /** Only '\' is invalid in Azure Service Bus entity names. '/' is valid (hierarchical paths). */
+  private static readonly INVALID_CHARS = /\\/;
 
   close() {
     this.closed.emit();
@@ -245,7 +247,7 @@ export class CreateEntityModalComponent {
   onNameChange(value: string) {
     if (CreateEntityModalComponent.INVALID_CHARS.test(value)) {
       this.nameValidationError.set(
-        'Names cannot contain "/" or "\\" — these characters are not valid in Azure Service Bus entity names.'
+        '"\\\" is not a valid character in Azure Service Bus names. Use "/" for hierarchical paths instead (e.g. orders/uk/invoices).'
       );
     } else {
       this.nameValidationError.set('');

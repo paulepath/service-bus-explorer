@@ -44,9 +44,9 @@ public static class EntityEndpoints
             {
                 return Results.BadRequest(new { error = "Queue name is required." });
             }
-            if (request.Name.Contains('/') || request.Name.Contains('\\'))
+            if (request.Name.Contains('\\'))
             {
-                return Results.BadRequest(new { error = "Queue names cannot contain '/' or '\\' — these characters are not valid in Azure Service Bus entity names." });
+                return Results.BadRequest(new { error = @"Queue names cannot contain '\'. Use '/' for hierarchical paths instead (e.g. orders/uk/invoices)." });
             }
             try
             {
@@ -91,9 +91,9 @@ public static class EntityEndpoints
             {
                 return Results.BadRequest(new { error = "Topic name is required." });
             }
-            if (request.Name.Contains('/') || request.Name.Contains('\\'))
+            if (request.Name.Contains('\\'))
             {
-                return Results.BadRequest(new { error = "Topic names cannot contain '/' or '\\' — these characters are not valid in Azure Service Bus entity names." });
+                return Results.BadRequest(new { error = @"Topic names cannot contain '\'. Use '/' for hierarchical paths instead (e.g. events/uk/orders)." });
             }
             try
             {

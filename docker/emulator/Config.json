@@ -75,14 +75,6 @@
               "MaxDeliveryCount": 10,
               "RequiresSession": false
             }
-          },
-          {
-            "Name": "notifications\\email",
-            "Properties": {
-              "LockDuration": "PT1M",
-              "MaxDeliveryCount": 10,
-              "RequiresSession": false
-            }
           }
         ],
         "Topics": [
@@ -117,16 +109,6 @@
           },
           {
             "Name": "my/somethingelse",
-            "Properties": {},
-            "Subscriptions": []
-          },
-          {
-            "Name": "epath\\test",
-            "Properties": {},
-            "Subscriptions": []
-          },
-          {
-            "Name": "epath\\test2",
             "Properties": {},
             "Subscriptions": []
           }
