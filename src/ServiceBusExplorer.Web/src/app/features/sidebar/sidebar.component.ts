@@ -90,8 +90,11 @@ import { TreeNode, buildHierarchicalTree } from './sidebar-tree.models';
     <!-- Recursive Queue Node Template -->
     <ng-template #queueNodeTpl let-node let-depth="depth">
       @if (node.isFolder) {
-        <div class="folder-group" [style.padding-left.px]="depth * 10">
-          <div class="tree-item folder-item" (click)="toggleFolder(node.fullPath, $event)">
+        <div class="folder-group">
+          <div
+            class="tree-item folder-item"
+            [style.padding-left.px]="depth * 20 + 8"
+            (click)="toggleFolder(node.fullPath, $event)">
             <span class="toggle-icon">{{ isExpanded(node.fullPath) ? '▼' : '▶' }}</span>
             <span class="item-icon">{{ isExpanded(node.fullPath) ? '📂' : '📁' }}</span>
             <span class="item-name folder-name" [title]="node.fullPath">{{ node.name }}</span>
@@ -109,17 +112,19 @@ import { TreeNode, buildHierarchicalTree } from './sidebar-tree.models';
           </div>
 
           @if (isExpanded(node.fullPath)) {
-            <div class="folder-children">
-              @for (child of node.children; track child.fullPath) {
-                <ng-container *ngTemplateOutlet="queueNodeTpl; context: { $implicit: child, depth: depth + 1 }"></ng-container>
-              }
+            <div class="folder-children" [style.padding-left.px]="depth * 20 + 18">
+              <div class="folder-children-inner">
+                @for (child of node.children; track child.fullPath) {
+                  <ng-container *ngTemplateOutlet="queueNodeTpl; context: { $implicit: child, depth: 0 }"></ng-container>
+                }
+              </div>
             </div>
           }
         </div>
       } @else if (node.item) {
         <div
-          class="tree-item"
-          [style.padding-left.px]="depth * 10 + 8"
+          class="tree-item leaf-item"
+          [style.padding-left.px]="depth * 20 + 8"
           [class.selected]="isSelected('queue', node.item.name)"
           (click)="selectQueue(node.item)">
           <span class="item-icon">📬</span>
@@ -148,24 +153,32 @@ import { TreeNode, buildHierarchicalTree } from './sidebar-tree.models';
     <!-- Recursive Topic Node Template -->
     <ng-template #topicNodeTpl let-node let-depth="depth">
       @if (node.isFolder) {
-        <div class="folder-group" [style.padding-left.px]="depth * 10">
-          <div class="tree-item folder-item" (click)="toggleFolder(node.fullPath, $event)">
+        <div class="folder-group">
+          <div
+            class="tree-item folder-item"
+            [style.padding-left.px]="depth * 20 + 8"
+            (click)="toggleFolder(node.fullPath, $event)">
             <span class="toggle-icon">{{ isExpanded(node.fullPath) ? '▼' : '▶' }}</span>
             <span class="item-icon">{{ isExpanded(node.fullPath) ? '📂' : '📁' }}</span>
             <span class="item-name folder-name" [title]="node.fullPath">{{ node.name }}</span>
           </div>
 
           @if (isExpanded(node.fullPath)) {
-            <div class="folder-children">
-              @for (child of node.children; track child.fullPath) {
-                <ng-container *ngTemplateOutlet="topicNodeTpl; context: { $implicit: child, depth: depth + 1 }"></ng-container>
-              }
+            <div class="folder-children" [style.padding-left.px]="depth * 20 + 18">
+              <div class="folder-children-inner">
+                @for (child of node.children; track child.fullPath) {
+                  <ng-container *ngTemplateOutlet="topicNodeTpl; context: { $implicit: child, depth: 0 }"></ng-container>
+                }
+              </div>
             </div>
           }
         </div>
       } @else if (node.item) {
-        <div class="tree-topic" [style.padding-left.px]="depth * 10">
-          <div class="tree-item topic-header">
+        <div class="tree-topic">
+          <div
+            class="tree-item topic-header leaf-item"
+            [style.padding-left.px]="depth * 20 + 8"
+            (click)="selectTopic(node.item)">
             <span class="item-icon">📢</span>
             <span class="item-name" [title]="node.item.name">{{ node.name }}</span>
 
@@ -186,13 +199,14 @@ import { TreeNode, buildHierarchicalTree } from './sidebar-tree.models';
           </div>
 
           <!-- Subscriptions List -->
-          <div class="subscription-list">
+          <div class="subscription-list" [style.padding-left.px]="depth * 20 + 8">
             @for (sub of node.item.subscriptions; track sub.subscriptionName) {
               <div
                 class="tree-item sub-item"
                 [class.selected]="isSelected('subscription', sub.subscriptionName, node.item.name)"
                 (click)="selectSubscription(node.item.name, sub)">
-                <span class="item-icon">↳ 📥</span>
+                <span class="item-icon sub-icon">↳</span>
+                <span class="item-icon">📥</span>
                 <span class="item-name" [title]="sub.subscriptionName">{{ sub.subscriptionName }}</span>
 
                 <div class="item-badges">
@@ -277,7 +291,7 @@ import { TreeNode, buildHierarchicalTree } from './sidebar-tree.models';
     .tree-container {
       flex: 1;
       overflow-y: auto;
-      padding: 8px;
+      padding: 8px 4px;
     }
     .tree-group {
       margin-bottom: 16px;
@@ -304,6 +318,17 @@ import { TreeNode, buildHierarchicalTree } from './sidebar-tree.models';
     .folder-group {
       display: flex;
       flex-direction: column;
+      position: relative;
+    }
+    .folder-children {
+      display: flex;
+      flex-direction: column;
+    }
+    .folder-children-inner {
+      display: flex;
+      flex-direction: column;
+      border-left: 1px dashed var(--border-color);
+      padding-left: 2px;
     }
     .folder-item {
       font-weight: 600;
@@ -318,6 +343,7 @@ import { TreeNode, buildHierarchicalTree } from './sidebar-tree.models';
       width: 12px;
       text-align: center;
       color: var(--text-dim);
+      flex-shrink: 0;
     }
     .tree-item {
       display: flex;
@@ -338,6 +364,11 @@ import { TreeNode, buildHierarchicalTree } from './sidebar-tree.models';
     }
     .item-icon {
       font-size: 12px;
+      flex-shrink: 0;
+    }
+    .sub-icon {
+      color: var(--text-dim);
+      font-size: 10px;
     }
     .item-name {
       flex: 1;
@@ -369,10 +400,12 @@ import { TreeNode, buildHierarchicalTree } from './sidebar-tree.models';
       transform: scale(1.15);
     }
     .subscription-list {
-      padding-left: 14px;
+      display: flex;
+      flex-direction: column;
     }
     .sub-item {
       padding: 4px 8px;
+      padding-left: 28px;
       font-size: 11px;
     }
     .empty-text {
@@ -382,6 +415,7 @@ import { TreeNode, buildHierarchicalTree } from './sidebar-tree.models';
       font-style: italic;
     }
   `]
+
 })
 export class SidebarComponent {
   @Output() openConnectModal = new EventEmitter<void>();
@@ -424,6 +458,10 @@ export class SidebarComponent {
       name: queue.name,
       counts: queue.counts
     });
+  }
+
+  selectTopic(topic: TopicSummary) {
+    // Optionally preview topic info or first sub
   }
 
   selectSubscription(topicName: string, sub: any) {

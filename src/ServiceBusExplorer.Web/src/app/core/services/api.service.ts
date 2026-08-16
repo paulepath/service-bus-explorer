@@ -28,6 +28,11 @@ export class ApiService {
   // Default to localhost:5000 or relative url if hosted together
   private baseUrl = window.location.port === '4200' ? 'http://localhost:5000' : '';
 
+  // Encode entity name so / and \ in names don't corrupt URL path routing
+  private enc(name: string): string {
+    return encodeURIComponent(name);
+  }
+
   getDiscoveredEmulators(): Observable<DiscoveredEmulator[]> {
     return this.http.get<DiscoveredEmulator[]>(`${this.baseUrl}/api/discovery/emulators`);
   }
@@ -61,7 +66,7 @@ export class ApiService {
   }
 
   deleteQueue(connectionId: string, queueName: string): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}/api/connections/${connectionId}/queues/${queueName}`);
+    return this.http.delete<void>(`${this.baseUrl}/api/connections/${connectionId}/queues/${this.enc(queueName)}`);
   }
 
   getTopics(connectionId: string): Observable<TopicSummary[]> {
@@ -73,23 +78,25 @@ export class ApiService {
   }
 
   deleteTopic(connectionId: string, topicName: string): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}/api/connections/${connectionId}/topics/${topicName}`);
+    return this.http.delete<void>(`${this.baseUrl}/api/connections/${connectionId}/topics/${this.enc(topicName)}`);
   }
 
   createSubscription(connectionId: string, topicName: string, request: CreateSubscriptionRequest): Observable<SubscriptionSummary> {
-    return this.http.post<SubscriptionSummary>(`${this.baseUrl}/api/connections/${connectionId}/topics/${topicName}/subscriptions`, request);
+    return this.http.post<SubscriptionSummary>(`${this.baseUrl}/api/connections/${connectionId}/topics/${this.enc(topicName)}/subscriptions`, request);
   }
 
   deleteSubscription(connectionId: string, topicName: string, subscriptionName: string): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}/api/connections/${connectionId}/topics/${topicName}/subscriptions/${subscriptionName}`);
+    return this.http.delete<void>(`${this.baseUrl}/api/connections/${connectionId}/topics/${this.enc(topicName)}/subscriptions/${this.enc(subscriptionName)}`);
   }
 
   getEntityCounts(connectionId: string, entity: SelectedEntity): Observable<EntityRuntimeCounts> {
     if (entity.type === 'queue') {
-      return this.http.get<EntityRuntimeCounts>(`${this.baseUrl}/api/connections/${connectionId}/queues/${entity.name}/counts`);
+      return this.http.get<EntityRuntimeCounts>(
+        `${this.baseUrl}/api/connections/${connectionId}/queues/${this.enc(entity.name)}/counts`
+      );
     } else {
       return this.http.get<EntityRuntimeCounts>(
-        `${this.baseUrl}/api/connections/${connectionId}/topics/${entity.topicName}/subscriptions/${entity.subscriptionName}/counts`
+        `${this.baseUrl}/api/connections/${connectionId}/topics/${this.enc(entity.topicName!)}/subscriptions/${this.enc(entity.subscriptionName!)}/counts`
       );
     }
   }
@@ -106,12 +113,12 @@ export class ApiService {
 
     if (entity.type === 'queue') {
       return this.http.get<ServiceBusMessageDto[]>(
-        `${this.baseUrl}/api/connections/${connectionId}/queues/${entity.name}/messages`,
+        `${this.baseUrl}/api/connections/${connectionId}/queues/${this.enc(entity.name)}/messages`,
         { params }
       );
     } else {
       return this.http.get<ServiceBusMessageDto[]>(
-        `${this.baseUrl}/api/connections/${connectionId}/topics/${entity.topicName}/subscriptions/${entity.subscriptionName}/messages`,
+        `${this.baseUrl}/api/connections/${connectionId}/topics/${this.enc(entity.topicName!)}/subscriptions/${this.enc(entity.subscriptionName!)}/messages`,
         { params }
       );
     }
@@ -119,8 +126,8 @@ export class ApiService {
 
   sendMessage(connectionId: string, entity: SelectedEntity, request: SendMessageRequest): Observable<SendMessageResult> {
     const targetPath = entity.type === 'queue'
-      ? `queues/${entity.name}`
-      : `topics/${entity.topicName || entity.name}`;
+      ? `queues/${this.enc(entity.name)}`
+      : `topics/${this.enc(entity.topicName || entity.name)}`;
 
     return this.http.post<SendMessageResult>(
       `${this.baseUrl}/api/connections/${connectionId}/${targetPath}/messages/send`,
@@ -130,8 +137,8 @@ export class ApiService {
 
   resendDeadLetter(connectionId: string, entity: SelectedEntity, request: ResendDeadLetterRequest): Observable<ResendDeadLetterResult> {
     const targetPath = entity.type === 'queue'
-      ? `queues/${entity.name}/deadletters/resend`
-      : `topics/${entity.topicName}/subscriptions/${entity.subscriptionName}/deadletters/resend`;
+      ? `queues/${this.enc(entity.name)}/deadletters/resend`
+      : `topics/${this.enc(entity.topicName!)}/subscriptions/${this.enc(entity.subscriptionName!)}/deadletters/resend`;
 
     return this.http.post<ResendDeadLetterResult>(
       `${this.baseUrl}/api/connections/${connectionId}/${targetPath}`,
@@ -141,16 +148,16 @@ export class ApiService {
 
   cancelScheduled(connectionId: string, entity: SelectedEntity, sequenceNumber: number): Observable<void> {
     const targetPath = entity.type === 'queue'
-      ? `queues/${entity.name}/messages/scheduled/${sequenceNumber}`
-      : `topics/${entity.topicName}/messages/scheduled/${sequenceNumber}`;
+      ? `queues/${this.enc(entity.name)}/messages/scheduled/${sequenceNumber}`
+      : `topics/${this.enc(entity.topicName!)}/messages/scheduled/${sequenceNumber}`;
 
     return this.http.delete<void>(`${this.baseUrl}/api/connections/${connectionId}/${targetPath}`);
   }
 
   purgeMessages(connectionId: string, entity: SelectedEntity, subQueue: number = 0, maxCount: number = 1000): Observable<{ purgedCount: number }> {
     const targetPath = entity.type === 'queue'
-      ? `queues/${entity.name}/purge`
-      : `topics/${entity.topicName}/subscriptions/${entity.subscriptionName}/purge`;
+      ? `queues/${this.enc(entity.name)}/purge`
+      : `topics/${this.enc(entity.topicName!)}/subscriptions/${this.enc(entity.subscriptionName!)}/purge`;
 
     return this.http.post<{ purgedCount: number }>(
       `${this.baseUrl}/api/connections/${connectionId}/${targetPath}?subQueue=${subQueue}&maxCount=${maxCount}`,

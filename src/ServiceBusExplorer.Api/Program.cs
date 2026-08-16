@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http.Json;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.FileProviders;
 using ServiceBusExplorer.Api.Endpoints;
 using ServiceBusExplorer.AzureServiceBus.Extensions;
@@ -8,6 +9,14 @@ using ServiceBusExplorer.Core.Services;
 using ServiceBusExplorer.Discovery.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Allow %2F (encoded slash) in URL path segments — needed for queue/topic names containing /
+builder.WebHost.UseSetting("AllowEncodedSlashesInUri", "true");
+builder.WebHost.ConfigureKestrel(o =>
+{
+    o.AllowAlternateSchemes = true;
+});
+
 
 // Configure JSON serialization for enums and flexible types
 builder.Services.ConfigureHttpJsonOptions(options =>
