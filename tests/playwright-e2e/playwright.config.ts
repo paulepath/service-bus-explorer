@@ -13,7 +13,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: 'dotnet run --project ../../src/ServiceBusExplorer.Api/ServiceBusExplorer.Api.csproj --urls http://127.0.0.1:5000',
+    command: 'dotnet ../../src/ServiceBusExplorer.Api/bin/Debug/net10.0/ServiceBusExplorer.Api.dll --urls http://127.0.0.1:5000',
     url: 'http://127.0.0.1:5000/api/health',
     reuseExistingServer: true,
     timeout: 60000,

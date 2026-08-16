@@ -9,7 +9,7 @@ using ServiceBusExplorer.Discovery.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure JSON serialization for enums, time spans, and polymorphic types
+// Configure JSON serialization for enums and flexible types
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -53,15 +53,21 @@ try
 catch { }
 
 // Serve Angular static files if dist folder exists
-string webDistPath = Path.Combine(app.Environment.ContentRootPath, "..", "ServiceBusExplorer.Web", "dist", "ServiceBusExplorer.Web", "browser");
-if (!Directory.Exists(webDistPath))
-{
-    webDistPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
-}
+string[] candidatePaths = [
+    Path.Combine(app.Environment.ContentRootPath, "..", "ServiceBusExplorer.Web", "dist", "ServiceBusExplorer.Web", "browser"),
+    Path.Combine(app.Environment.ContentRootPath, "..", "..", "..", "ServiceBusExplorer.Web", "dist", "ServiceBusExplorer.Web", "browser"),
+    Path.Combine(Directory.GetCurrentDirectory(), "src", "ServiceBusExplorer.Web", "dist", "ServiceBusExplorer.Web", "browser"),
+    Path.Combine(Directory.GetCurrentDirectory(), "..", "ServiceBusExplorer.Web", "dist", "ServiceBusExplorer.Web", "browser"),
+    Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "src", "ServiceBusExplorer.Web", "dist", "ServiceBusExplorer.Web", "browser"),
+    Path.Combine(app.Environment.ContentRootPath, "wwwroot")
+];
 
-if (Directory.Exists(webDistPath))
+string? webDistPath = candidatePaths.FirstOrDefault(Directory.Exists);
+
+if (!string.IsNullOrEmpty(webDistPath))
 {
-    var fileProvider = new PhysicalFileProvider(Path.GetFullPath(webDistPath));
+    var fullWebDistPath = Path.GetFullPath(webDistPath);
+    var fileProvider = new PhysicalFileProvider(fullWebDistPath);
     app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = fileProvider });
     app.UseStaticFiles(new StaticFileOptions { FileProvider = fileProvider });
 }
@@ -80,11 +86,21 @@ app.MapGet("/api/health", () => Results.Ok(new
     Environment = app.Environment.EnvironmentName
 }));
 
-if (Directory.Exists(webDistPath))
+if (!string.IsNullOrEmpty(webDistPath))
 {
-    app.MapFallbackToFile("index.html", new StaticFileOptions
+    var fullWebDistPath = Path.GetFullPath(webDistPath);
+    app.MapFallback(async context =>
     {
-        FileProvider = new PhysicalFileProvider(Path.GetFullPath(webDistPath))
+        string indexPath = Path.Combine(fullWebDistPath, "index.html");
+        if (File.Exists(indexPath))
+        {
+            context.Response.ContentType = "text/html";
+            await context.Response.SendFileAsync(indexPath);
+        }
+        else
+        {
+            context.Response.StatusCode = 404;
+        }
     });
 }
 else
