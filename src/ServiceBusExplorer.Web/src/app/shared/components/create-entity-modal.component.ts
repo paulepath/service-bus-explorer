@@ -38,9 +38,16 @@ export type EntityCreationType = 'queue' | 'topic' | 'subscription';
               <input
                 type="text"
                 [(ngModel)]="name"
+                (ngModelChange)="onNameChange($event)"
                 class="form-input"
+                [class.input-invalid]="nameValidationError()"
                 placeholder="e.g. orders-processing"
                 autofocus />
+              @if (nameValidationError()) {
+                <div class="validation-hint">
+                  <span class="hint-icon">⚠️</span> {{ nameValidationError() }}
+                </div>
+              }
             </div>
 
             <div class="grid-2">
@@ -73,9 +80,16 @@ export type EntityCreationType = 'queue' | 'topic' | 'subscription';
               <input
                 type="text"
                 [(ngModel)]="name"
+                (ngModelChange)="onNameChange($event)"
                 class="form-input"
+                [class.input-invalid]="nameValidationError()"
                 placeholder="e.g. order-events"
                 autofocus />
+              @if (nameValidationError()) {
+                <div class="validation-hint">
+                  <span class="hint-icon">⚠️</span> {{ nameValidationError() }}
+                </div>
+              }
             </div>
 
             <div class="form-section">
@@ -95,9 +109,16 @@ export type EntityCreationType = 'queue' | 'topic' | 'subscription';
               <input
                 type="text"
                 [(ngModel)]="name"
+                (ngModelChange)="onNameChange($event)"
                 class="form-input"
+                [class.input-invalid]="nameValidationError()"
                 placeholder="e.g. invoice-service-sub"
                 autofocus />
+              @if (nameValidationError()) {
+                <div class="validation-hint">
+                  <span class="hint-icon">⚠️</span> {{ nameValidationError() }}
+                </div>
+              }
             </div>
 
             <div class="grid-2">
@@ -130,7 +151,7 @@ export type EntityCreationType = 'queue' | 'topic' | 'subscription';
 
         <div class="modal-footer">
           <button class="btn btn-secondary" (click)="close()">Cancel</button>
-          <button class="btn btn-primary" (click)="create()" [disabled]="isCreating() || !name.trim()">
+          <button class="btn btn-primary" (click)="create()" [disabled]="isCreating() || !name.trim() || !!nameValidationError()">
             {{ isCreating() ? 'Creating...' : 'Create ' + entityType }}
           </button>
         </div>
@@ -176,7 +197,23 @@ export type EntityCreationType = 'queue' | 'topic' | 'subscription';
       font-size: 12px;
       margin-top: 10px;
     }
+    .input-invalid {
+      border-color: var(--accent-danger) !important;
+      box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+    }
+    .validation-hint {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: #fca5a5;
+      margin-top: 5px;
+    }
+    .hint-icon {
+      font-size: 12px;
+    }
   `]
+
 })
 export class CreateEntityModalComponent {
   @Input() entityType: EntityCreationType = 'queue';
@@ -196,9 +233,23 @@ export class CreateEntityModalComponent {
 
   isCreating = signal<boolean>(false);
   errorMessage = signal<string>('');
+  nameValidationError = signal<string>('');
+
+  /** Characters that Azure Service Bus rejects in entity names */
+  private static readonly INVALID_CHARS = /[\/\\]/;
 
   close() {
     this.closed.emit();
+  }
+
+  onNameChange(value: string) {
+    if (CreateEntityModalComponent.INVALID_CHARS.test(value)) {
+      this.nameValidationError.set(
+        'Names cannot contain "/" or "\\" — these characters are not valid in Azure Service Bus entity names.'
+      );
+    } else {
+      this.nameValidationError.set('');
+    }
   }
 
   private formatDuration(seconds: number): string {
@@ -211,6 +262,7 @@ export class CreateEntityModalComponent {
   create() {
     const conn = this.state.selectedConnection();
     if (!conn || !this.name.trim()) return;
+    if (this.nameValidationError()) return;  // guard against invalid chars
 
     this.isCreating.set(true);
     this.errorMessage.set('');

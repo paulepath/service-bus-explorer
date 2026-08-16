@@ -44,6 +44,10 @@ public static class EntityEndpoints
             {
                 return Results.BadRequest(new { error = "Queue name is required." });
             }
+            if (request.Name.Contains('/') || request.Name.Contains('\\'))
+            {
+                return Results.BadRequest(new { error = "Queue names cannot contain '/' or '\\' — these characters are not valid in Azure Service Bus entity names." });
+            }
             try
             {
                 var queue = await explorer.CreateQueueAsync(connectionId, request, ct);
@@ -86,6 +90,10 @@ public static class EntityEndpoints
             if (string.IsNullOrWhiteSpace(request.Name))
             {
                 return Results.BadRequest(new { error = "Topic name is required." });
+            }
+            if (request.Name.Contains('/') || request.Name.Contains('\\'))
+            {
+                return Results.BadRequest(new { error = "Topic names cannot contain '/' or '\\' — these characters are not valid in Azure Service Bus entity names." });
             }
             try
             {
