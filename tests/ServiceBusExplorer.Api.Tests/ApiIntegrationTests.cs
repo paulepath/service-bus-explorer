@@ -13,7 +13,7 @@ namespace ServiceBusExplorer.Api.Tests;
 public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly HttpClient _client;
-    private const string EmulatorConnStr = "Endpoint=sb://127.0.0.1:5673;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;";
+    private const string EmulatorConnStr = "Endpoint=sb://127.0.0.1:5674;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;";
 
     private readonly JsonSerializerOptions _jsonOptions = new()
     {

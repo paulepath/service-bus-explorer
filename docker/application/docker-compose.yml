@@ -4,8 +4,10 @@ services:
       context: ../..
       dockerfile: docker/application/Dockerfile
     container_name: "servicebus-explorer"
-    ports:
-      - "8080:8080"
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8090

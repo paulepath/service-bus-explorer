@@ -47,13 +47,21 @@ public sealed class AzureMessageOperationsService : IMessageOperationsService
         await using var receiver = CreateReceiver(client, entityPath, options);
 
         IReadOnlyList<ServiceBusReceivedMessage> messages;
-        if (fromSequenceNumber.HasValue)
+        try
         {
-            messages = await receiver.PeekMessagesAsync(maxMessages, fromSequenceNumber.Value, ct);
+            if (fromSequenceNumber.HasValue)
+            {
+                messages = await receiver.PeekMessagesAsync(maxMessages, fromSequenceNumber.Value, ct);
+            }
+            else
+            {
+                messages = await receiver.PeekMessagesAsync(maxMessages, cancellationToken: ct);
+            }
         }
-        else
+        catch (ServiceBusException sbe) when (sbe.Reason == ServiceBusFailureReason.MessagingEntityNotFound)
         {
-            messages = await receiver.PeekMessagesAsync(maxMessages, cancellationToken: ct);
+            _logger.LogWarning("Entity {Path} was not found on broker during PeekMessages", entityPath);
+            return Array.Empty<ServiceBusMessageDto>();
         }
 
         return messages.Select(m => MessageConverter.ToDto(m, subQueue)).ToList();

@@ -14,8 +14,8 @@ services:
     container_name: "sbe-test-emulator"
     restart: unless-stopped
     ports:
-      - "5673:5672"
-      - "5301:5300"
+      - "5674:5672"
+      - "5302:5300"
     volumes:
       - ./Config.json:/ServiceBus_Emulator/ConfigFiles/Config.json:ro
     environment:

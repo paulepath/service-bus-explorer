@@ -10,7 +10,7 @@ namespace ServiceBusExplorer.IntegrationTests;
 
 public class ServiceBusEmulatorIntegrationTests : IAsyncDisposable
 {
-    private const string EmulatorConnectionString = "Endpoint=sb://127.0.0.1:5673;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;";
+    private const string EmulatorConnectionString = "Endpoint=sb://127.0.0.1:5674;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;";
     private readonly InMemoryConnectionManager _connectionManager;
     private readonly ServiceBusClientCache _clientCache;
     private readonly AzureServiceBusExplorerService _explorerService;

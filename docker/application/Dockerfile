@@ -19,12 +19,13 @@ RUN dotnet publish src/ServiceBusExplorer.Api/ServiceBusExplorer.Api.csproj -c R
 
 # Stage 3: Runtime Image
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
+RUN apk add --no-cache docker-cli
 WORKDIR /app
 COPY --from=build-api /out ./
 COPY --from=build-web /app/web/dist/ServiceBusExplorer.Web/browser ./wwwroot
 
-ENV ASPNETCORE_URLS=http://+:8080
+ENV ASPNETCORE_URLS=http://+:8090
 ENV ASPNETCORE_ENVIRONMENT=Production
-EXPOSE 8080
+EXPOSE 8090
 
 ENTRYPOINT ["dotnet", "ServiceBusExplorer.Api.dll"]

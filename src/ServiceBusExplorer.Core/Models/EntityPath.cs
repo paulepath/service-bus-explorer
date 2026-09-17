@@ -30,13 +30,17 @@ public sealed record EntityPath
     }
 
     public static EntityPath ForQueue(string queueName) =>
-        new(EntityType.Queue, queueName);
+        new(EntityType.Queue, Uri.UnescapeDataString(queueName));
 
     public static EntityPath ForTopic(string topicName) =>
-        new(EntityType.Topic, topicName);
+        new(EntityType.Topic, Uri.UnescapeDataString(topicName));
 
-    public static EntityPath ForSubscription(string topicName, string subscriptionName) =>
-        new(EntityType.Subscription, $"{topicName}/Subscriptions/{subscriptionName}", topicName, subscriptionName);
+    public static EntityPath ForSubscription(string topicName, string subscriptionName)
+    {
+        var decodedTopic = Uri.UnescapeDataString(topicName);
+        var decodedSub = Uri.UnescapeDataString(subscriptionName);
+        return new(EntityType.Subscription, $"{decodedTopic}/Subscriptions/{decodedSub}", decodedTopic, decodedSub);
+    }
 
     public override string ToString() => Name;
 }

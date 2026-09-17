@@ -61,10 +61,11 @@ public static class EntityEndpoints
 
         group.MapDelete("/queues/{queueName}", async (string connectionId, string queueName, IServiceBusExplorerService explorer, CancellationToken ct) =>
         {
+            var decodedQueue = Uri.UnescapeDataString(queueName);
             try
             {
-                var deleted = await explorer.DeleteQueueAsync(connectionId, queueName, ct);
-                return deleted ? Results.Ok(new { message = $"Queue '{queueName}' deleted." }) : Results.NotFound();
+                var deleted = await explorer.DeleteQueueAsync(connectionId, decodedQueue, ct);
+                return deleted ? Results.Ok(new { message = $"Queue '{decodedQueue}' deleted." }) : Results.NotFound();
             }
             catch (KeyNotFoundException ex)
             {
@@ -108,10 +109,11 @@ public static class EntityEndpoints
 
         group.MapDelete("/topics/{topicName}", async (string connectionId, string topicName, IServiceBusExplorerService explorer, CancellationToken ct) =>
         {
+            var decodedTopic = Uri.UnescapeDataString(topicName);
             try
             {
-                var deleted = await explorer.DeleteTopicAsync(connectionId, topicName, ct);
-                return deleted ? Results.Ok(new { message = $"Topic '{topicName}' deleted." }) : Results.NotFound();
+                var deleted = await explorer.DeleteTopicAsync(connectionId, decodedTopic, ct);
+                return deleted ? Results.Ok(new { message = $"Topic '{decodedTopic}' deleted." }) : Results.NotFound();
             }
             catch (KeyNotFoundException ex)
             {
@@ -125,10 +127,11 @@ public static class EntityEndpoints
             {
                 return Results.BadRequest(new { error = "Subscription name is required." });
             }
+            var decodedTopic = Uri.UnescapeDataString(topicName);
             try
             {
-                var sub = await explorer.CreateSubscriptionAsync(connectionId, topicName, request, ct);
-                return Results.Created($"/api/connections/{connectionId}/topics/{topicName}/subscriptions/{sub.SubscriptionName}", sub);
+                var sub = await explorer.CreateSubscriptionAsync(connectionId, decodedTopic, request, ct);
+                return Results.Created($"/api/connections/{connectionId}/topics/{decodedTopic}/subscriptions/{sub.SubscriptionName}", sub);
             }
             catch (KeyNotFoundException ex)
             {
@@ -138,10 +141,12 @@ public static class EntityEndpoints
 
         group.MapDelete("/topics/{topicName}/subscriptions/{subscriptionName}", async (string connectionId, string topicName, string subscriptionName, IServiceBusExplorerService explorer, CancellationToken ct) =>
         {
+            var decodedTopic = Uri.UnescapeDataString(topicName);
+            var decodedSub = Uri.UnescapeDataString(subscriptionName);
             try
             {
-                var deleted = await explorer.DeleteSubscriptionAsync(connectionId, topicName, subscriptionName, ct);
-                return deleted ? Results.Ok(new { message = $"Subscription '{subscriptionName}' deleted." }) : Results.NotFound();
+                var deleted = await explorer.DeleteSubscriptionAsync(connectionId, decodedTopic, decodedSub, ct);
+                return deleted ? Results.Ok(new { message = $"Subscription '{decodedSub}' deleted." }) : Results.NotFound();
             }
             catch (KeyNotFoundException ex)
             {

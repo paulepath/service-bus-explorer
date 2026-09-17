@@ -105,12 +105,22 @@
           {
             "Name": "my/test/sub",
             "Properties": {},
-            "Subscriptions": []
+            "Subscriptions": [
+              {
+                "Name": "default",
+                "Properties": {}
+              }
+            ]
           },
           {
             "Name": "my/somethingelse",
             "Properties": {},
-            "Subscriptions": []
+            "Subscriptions": [
+              {
+                "Name": "default",
+                "Properties": {}
+              }
+            ]
           }
         ]
       }
